@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -61,7 +62,7 @@ def query_codebase(request: QueryRequest) -> QueryResponse:
         SourceRef(citation=format_citation(hit.file_path, hit.line_start, hit.line_end), score=hit.score)
         for hit in hits
     ]
-    return QueryResponse(answer=answer, sources=sources, diagnostics=retrieval.diagnostics.__dict__)
+    return QueryResponse(answer=answer, sources=sources, diagnostics=asdict(retrieval.diagnostics))
 
 
 @app.get("/callers/{symbol}", response_model=CallersResponse)

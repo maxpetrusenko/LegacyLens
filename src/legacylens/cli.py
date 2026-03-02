@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 import logging
 from pathlib import Path
@@ -29,7 +30,7 @@ def run_query(query: str, codebase_path: str | None) -> None:
     for hit in hits:
         print(f"- {format_citation(hit.file_path, hit.line_start, hit.line_end)}")
     print("\nDiagnostics:")
-    print(json.dumps(retrieval.diagnostics.__dict__, indent=2))
+    print(json.dumps(asdict(retrieval.diagnostics), indent=2))
 
 
 def run_callers(symbol: str, codebase_path: str) -> None:
