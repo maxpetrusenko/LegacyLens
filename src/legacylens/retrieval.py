@@ -43,9 +43,10 @@ def _expand_context(codebase_path: Path, hit: RetrievalHit, expand_lines: int) -
 
 
 def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[RetrievalHit]:
+    globs = ["-g", "*.cob", "-g", "*.cbl", "-g", "*.cpy", "-g", "*.cobol"]
     try:
         result = subprocess.run(
-            ["rg", "-n", "--max-count", str(limit), "-e", query, str(codebase_path)],
+            ["rg", "-n", "--max-count", str(limit), *globs, "-e", query, str(codebase_path)],
             capture_output=True,
             text=True,
             check=False,

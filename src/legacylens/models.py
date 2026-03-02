@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import hashlib
 from typing import Any
 
 
@@ -16,8 +17,10 @@ class CodeChunk:
     tags: list[str]
     language: str = "cobol"
 
-    def point_id(self) -> str:
-        return f"{self.file_path}:{self.line_start}:{self.line_end}"
+    def point_id(self) -> int:
+        raw = f"{self.file_path}:{self.line_start}:{self.line_end}".encode("utf-8")
+        digest = hashlib.sha256(raw).digest()
+        return int.from_bytes(digest[:8], "big", signed=False)
 
     def payload(self) -> dict[str, Any]:
         return {
