@@ -36,12 +36,13 @@ class QdrantStore:
         self.client.upsert(collection_name=self.collection_name, points=points)
 
     def search(self, vector: list[float], limit: int) -> list[RetrievalHit]:
-        results = self.client.search(
+        response = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=vector,
+            query=vector,
             limit=limit,
             with_payload=True,
         )
+        results = response.points
         hits: list[RetrievalHit] = []
         for result in results:
             payload = dict(result.payload or {})
