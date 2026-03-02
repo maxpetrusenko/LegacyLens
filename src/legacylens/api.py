@@ -32,6 +32,17 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "service": "LegacyLens API",
+        "status": "ok",
+        "health": "/health",
+        "query": "/query",
+        "docs": "/docs",
+    }
+
+
 @app.post("/query", response_model=QueryResponse)
 def query_codebase(request: QueryRequest) -> QueryResponse:
     settings = Settings(codebase_path=request.codebase_path or ".")
