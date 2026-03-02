@@ -82,13 +82,18 @@ def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[R
 
 
 def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) -> list[RetrievalHit]:
-    provider = build_embedding_provider(settings)
-    store = QdrantStore(settings)
-    vector = provider.embed_query(query)
-    semantic_hits = store.search(vector, settings.top_k)
-    merged = semantic_hits
-
     effective_codebase = codebase_path or Path(settings.codebase_path)
+    semantic_hits: list[RetrievalHit] = []
+    merged: list[RetrievalHit] = []
+
+    try:
+        provider = build_embedding_provider(settings)
+        store = QdrantStore(settings)
+        vector = provider.embed_query(query)
+        semantic_hits = store.search(vector, settings.top_k)
+    except Exception:
+        semantic_hits = []
+
     if is_low_confidence(semantic_hits, settings.fallback_score_threshold, settings.fallback_gap_threshold):
         merged = dedupe_hits(semantic_hits + keyword_fallback(query, effective_codebase))
     else:
