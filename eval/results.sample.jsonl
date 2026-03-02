@@ -1,0 +1,2 @@
+{"chunks_returned": 0, "hybrid_triggered": true, "latency_ms": 463, "precision_at_k": 0.0, "query": "where is STOP RUN used?", "timestamp": null, "top1_score": 0.0}
+{"chunks_returned": 0, "hybrid_triggered": true, "latency_ms": 454, "precision_at_k": 0.0, "query": "where is file I/O handled?", "timestamp": null, "top1_score": 0.0}

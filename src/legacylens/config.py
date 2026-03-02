@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     fallback_score_threshold: float = 0.65
     fallback_gap_threshold: float = 0.15
     context_expand_lines: int = 10
+    query_cache_size: int = 256
+    dependency_graph_file: str = ".legacylens/dependency_graph.json"
 
 
 __all__ = ["Settings"]

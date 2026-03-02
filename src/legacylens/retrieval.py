@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+from collections import OrderedDict
+from time import perf_counter
 from pathlib import Path
 
 from legacylens.config import Settings
 from legacylens.embeddings import build_embedding_provider
-from legacylens.models import RetrievalHit
+from legacylens.models import RetrievalDiagnostics, RetrievalHit, RetrievalResult
 from legacylens.vector_store import QdrantStore
+
+_QUERY_CACHE: OrderedDict[str, list[float]] = OrderedDict()
+_QUERY_CACHE_LOCK = threading.Lock()
 
 
 def format_citation(file_path: str, line_start: int, line_end: int) -> str:
@@ -82,21 +88,57 @@ def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[R
     return hits
 
 
-def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) -> list[RetrievalHit]:
+def _cache_key(settings: Settings, query: str) -> str:
+    return "|".join(
+        [
+            settings.embed_provider.lower(),
+            settings.voyage_model,
+            settings.openai_embed_model,
+            query.strip().lower(),
+        ]
+    )
+
+
+def _embed_query_cached(query: str, settings: Settings, provider) -> list[float]:
+    key = _cache_key(settings, query)
+    with _QUERY_CACHE_LOCK:
+        cached = _QUERY_CACHE.get(key)
+        if cached is not None:
+            _QUERY_CACHE.move_to_end(key)
+            return cached
+
+    vector = provider.embed_query(query)
+    with _QUERY_CACHE_LOCK:
+        _QUERY_CACHE[key] = vector
+        while len(_QUERY_CACHE) > settings.query_cache_size:
+            _QUERY_CACHE.popitem(last=False)
+    return vector
+
+
+def retrieve_with_diagnostics(
+    query: str, settings: Settings, codebase_path: Path | None = None
+) -> RetrievalResult:
+    started = perf_counter()
     effective_codebase = codebase_path or Path(settings.codebase_path)
     semantic_hits: list[RetrievalHit] = []
+    fallback_hits: list[RetrievalHit] = []
     merged: list[RetrievalHit] = []
+    retrieval_error: str | None = None
+    hybrid_triggered = False
 
     try:
         provider = build_embedding_provider(settings)
         store = QdrantStore(settings)
-        vector = provider.embed_query(query)
+        vector = _embed_query_cached(query, settings, provider)
         semantic_hits = store.search(vector, settings.top_k)
-    except Exception:
+    except Exception as exc:
         semantic_hits = []
+        retrieval_error = str(exc)
 
     if is_low_confidence(semantic_hits, settings.fallback_score_threshold, settings.fallback_gap_threshold):
-        merged = dedupe_hits(semantic_hits + keyword_fallback(query, effective_codebase))
+        hybrid_triggered = True
+        fallback_hits = keyword_fallback(query, effective_codebase)
+        merged = dedupe_hits(semantic_hits + fallback_hits)
     else:
         merged = dedupe_hits(semantic_hits)
 
@@ -113,7 +155,27 @@ def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) 
                 metadata=hit.metadata,
             )
         )
-    return final_hits
+    diagnostics = RetrievalDiagnostics(
+        latency_ms=int((perf_counter() - started) * 1000),
+        top1_score=semantic_hits[0].score if semantic_hits else 0.0,
+        chunks_returned=len(final_hits),
+        hybrid_triggered=hybrid_triggered,
+        semantic_hits=len(semantic_hits),
+        fallback_hits=len(fallback_hits),
+        retrieval_error=retrieval_error,
+    )
+    return RetrievalResult(hits=final_hits, diagnostics=diagnostics)
 
 
-__all__ = ["format_citation", "is_low_confidence", "dedupe_hits", "keyword_fallback", "retrieve"]
+def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) -> list[RetrievalHit]:
+    return retrieve_with_diagnostics(query, settings, codebase_path).hits
+
+
+__all__ = [
+    "format_citation",
+    "is_low_confidence",
+    "dedupe_hits",
+    "keyword_fallback",
+    "retrieve",
+    "retrieve_with_diagnostics",
+]

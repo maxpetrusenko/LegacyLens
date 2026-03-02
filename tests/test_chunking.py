@@ -20,6 +20,7 @@ READ-FILE.
     assert chunks
     assert all(chunk.division == "PROCEDURE DIVISION" for chunk in chunks)
     assert any(chunk.symbol_name == "READ-FILE" for chunk in chunks)
+    assert all(chunk.symbol_name != "PROCEDURE DIVISION" for chunk in chunks)
     assert any("io" in chunk.tags for chunk in chunks)
 
 

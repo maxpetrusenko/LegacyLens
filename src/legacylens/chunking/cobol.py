@@ -21,6 +21,9 @@ RESERVED_KEYWORDS = {
     "COMPUTE",
     "DISPLAY",
     "ACCEPT",
+    "PROCEDURE",
+    "DIVISION",
+    "SECTION",
 }
 
 IO_PATTERN = re.compile(r"\b(OPEN|READ|WRITE|CLOSE|SELECT|FD)\b", re.IGNORECASE)

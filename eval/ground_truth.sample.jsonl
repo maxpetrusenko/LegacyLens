@@ -1,0 +1,2 @@
+{"query":"where is STOP RUN used?","relevant_files":["tests/testsuite.src/numeric-dump.cob","tests/testsuite.src/numeric-display.cob"]}
+{"query":"where is file I/O handled?","relevant_files":["tests/testsuite.src/fileio.cob"]}

@@ -1,5 +1,6 @@
 from legacylens.models import RetrievalHit
-from legacylens.retrieval import dedupe_hits, format_citation, is_low_confidence
+from legacylens.config import Settings
+from legacylens.retrieval import dedupe_hits, format_citation, is_low_confidence, retrieve_with_diagnostics
 
 
 def test_formats_citations() -> None:
@@ -26,3 +27,13 @@ def test_low_confidence_with_flat_scores() -> None:
         RetrievalHit("e.cob", 1, 1, "", 0.65, {}),
     ]
     assert is_low_confidence(hits, tau=0.65, delta=0.15) is True
+
+
+def test_retrieve_with_diagnostics_gracefully_handles_missing_qdrant(tmp_path) -> None:
+    codebase = tmp_path / "repo"
+    codebase.mkdir()
+    (codebase / "sample.cob").write_text("PROCEDURE DIVISION.\nSTOP RUN.\n", encoding="utf-8")
+    settings = Settings(codebase_path=str(codebase), qdrant_url="http://127.0.0.1:9999")
+    result = retrieve_with_diagnostics("STOP RUN", settings, codebase)
+    assert result.diagnostics.hybrid_triggered is True
+    assert result.diagnostics.retrieval_error is not None

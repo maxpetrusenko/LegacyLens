@@ -97,3 +97,32 @@ Legacy code requires specialized chunking. Document your approach:
 | Function-level | Each function/subroutine as a chunk |
 | Paragraph-level (COBOL) | COBOL PARAGRAPH as natural boundary |
 | Fixed-size + overlap | Fallback for unstructured sections |
+
+## LegacyLens Implementation Status (March 2, 2026)
+
+### MVP Gate Checklist
+
+- [x] Ingest at least one legacy codebase
+- [x] Chunk code files with syntax-aware splitting
+- [x] Generate embeddings for all chunks
+- [x] Store embeddings in a vector database
+- [x] Implement semantic search across the codebase
+- [x] Natural language query interface (CLI and web API)
+- [x] Return relevant code snippets with file/line references
+- [x] Basic answer generation using retrieved context
+- [x] Deployed and publicly accessible
+
+### Full Presearch Differentiators
+
+- [x] Deterministic tag assignment (`io`, `error_handling`, `entry_candidate`)
+- [x] Parser health check warning when fallback chunks exceed 30%
+- [x] Query embedding cache (in-process LRU)
+- [x] PERFORM/CALL dependency graph generation at ingestion
+- [x] Dependency lookup interface (`callers` CLI and `/callers/{symbol}` API)
+- [x] Precision@5 evaluation harness with per-query logging
+
+### Public Endpoints
+
+- API root: `https://legacylens-api-production.up.railway.app/`
+- Health: `https://legacylens-api-production.up.railway.app/health`
+- Query: `POST https://legacylens-api-production.up.railway.app/query`

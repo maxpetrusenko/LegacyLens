@@ -48,4 +48,21 @@ class RetrievalHit:
     metadata: dict[str, Any]
 
 
-__all__ = ["CodeChunk", "RetrievalHit"]
+@dataclass(slots=True)
+class RetrievalDiagnostics:
+    latency_ms: int
+    top1_score: float
+    chunks_returned: int
+    hybrid_triggered: bool
+    semantic_hits: int
+    fallback_hits: int
+    retrieval_error: str | None = None
+
+
+@dataclass(slots=True)
+class RetrievalResult:
+    hits: list[RetrievalHit]
+    diagnostics: RetrievalDiagnostics
+
+
+__all__ = ["CodeChunk", "RetrievalHit", "RetrievalDiagnostics", "RetrievalResult"]
