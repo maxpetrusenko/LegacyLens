@@ -226,9 +226,12 @@ def retrieve_with_diagnostics(
             vector = _embed_query_cached(expanded_query, settings, provider)
             return store.search(vector, settings.top_k)
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_semantic_retrieve)
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(_semantic_retrieve)
+        try:
             semantic_hits = future.result(timeout=settings.semantic_timeout_sec)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
     except FutureTimeoutError:
         semantic_hits = []
         retrieval_error = "semantic retrieval timed out"
