@@ -50,10 +50,10 @@ def test_retrieve_with_diagnostics_gracefully_handles_missing_qdrant(tmp_path) -
     (codebase / "sample.cob").write_text("PROCEDURE DIVISION.\nSTOP RUN.\n", encoding="utf-8")
     settings = Settings(codebase_path=str(codebase), qdrant_url="http://127.0.0.1:9999")
     result = retrieve_with_diagnostics("STOP RUN", settings, codebase)
-    assert result.diagnostics.hybrid_triggered is True
+    assert result.diagnostics.hybrid_triggered is False
     assert result.diagnostics.retrieval_error is not None
     assert result.diagnostics.confidence_level == "low"
-    assert result.diagnostics.query_intent == "general"
+    assert result.diagnostics.query_intent == "semantic"
 
 
 def test_parse_query_intent_entities_dependency() -> None:

@@ -16,8 +16,7 @@ from legacylens.dependency_graph import (
     find_symbol_neighborhood,
     load_callers_index,
 )
-from legacylens.retrieval import classify_confidence, format_citation, is_structural_query, retrieve_with_diagnostics
-from legacylens.structural import find_entry_point_hits
+from legacylens.retrieval import format_citation, retrieve_with_diagnostics
 from legacylens.vector_store import QdrantStore
 
 app = FastAPI(title="LegacyLens MVP")
@@ -111,51 +110,6 @@ def meta() -> dict[str, str]:
 def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
     settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
     effective_debug = bool(debug or request.debug)
-    if is_structural_query(request.query):
-        try:
-            structural_hits = find_entry_point_hits(settings, limit=settings.answer_k)
-        except Exception:
-            structural_hits = []
-        if structural_hits:
-            sources = [
-                SourceRef(
-                    citation=format_citation(hit.file_path, hit.line_start, hit.line_end),
-                    score=hit.score,
-                    text=hit.text,
-                )
-                for hit in structural_hits
-            ]
-            top_score = structural_hits[0].score
-            confidence = classify_confidence(
-                top_score,
-                settings.confidence_low_threshold,
-                settings.confidence_medium_threshold,
-            )
-            top_source = sources[0].citation
-            answer = (
-                f"Likely entry point candidate: {top_source}. "
-                "This structural match is based on call graph roots and termination verbs."
-            )
-            diagnostics = {
-                "latency_ms": 0,
-                "top1_score": top_score,
-                "chunks_returned": len(structural_hits),
-                "hybrid_triggered": False,
-                "semantic_hits": 0,
-                "fallback_hits": 0,
-                "confidence_level": confidence,
-                "query_intent": "structural_entry_point",
-                "query_entities": 0,
-                "rerank_applied": False,
-                "retrieval_error": None,
-            }
-            return QueryResponse(
-                answer=answer,
-                sources=sources,
-                diagnostics=diagnostics,
-                confidence_label=confidence,
-                debug_hits=sources[: min(5, len(sources))] if effective_debug else None,
-            )
 
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
     hits = retrieval.hits

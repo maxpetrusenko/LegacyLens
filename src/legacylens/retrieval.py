@@ -280,11 +280,8 @@ def retrieve_with_diagnostics(
     started = perf_counter()
     effective_codebase = codebase_path or Path(settings.codebase_path)
     semantic_hits: list[RetrievalHit] = []
-    fallback_hits: list[RetrievalHit] = []
-    merged: list[RetrievalHit] = []
     retrieval_error: str | None = None
-    hybrid_triggered = False
-    query_intent, query_entities, expanded_query = parse_query_intent_entities(query)
+    expanded_query = query.strip()
 
     try:
         def _semantic_retrieve() -> list[RetrievalHit]:
@@ -326,13 +323,7 @@ def retrieve_with_diagnostics(
         semantic_hits = []
         retrieval_error = str(exc)
 
-    if is_low_confidence(semantic_hits, settings.fallback_score_threshold, settings.fallback_gap_threshold):
-        hybrid_triggered = True
-        fallback_hits = keyword_fallback(expanded_query, effective_codebase)
-        merged = dedupe_hits(semantic_hits + fallback_hits)
-    else:
-        merged = dedupe_hits(semantic_hits)
-    merged = rerank_hits(merged, query, query_intent, query_entities)
+    merged = dedupe_hits(semantic_hits)
 
     final_hits: list[RetrievalHit] = []
     for hit in merged[: settings.answer_k]:
@@ -352,17 +343,17 @@ def retrieve_with_diagnostics(
         latency_ms=int((perf_counter() - started) * 1000),
         top1_score=top1_score,
         chunks_returned=len(final_hits),
-        hybrid_triggered=hybrid_triggered,
+        hybrid_triggered=False,
         semantic_hits=len(semantic_hits),
-        fallback_hits=len(fallback_hits),
+        fallback_hits=0,
         confidence_level=classify_confidence(
             top1_score,
             settings.confidence_low_threshold,
             settings.confidence_medium_threshold,
         ),
-        query_intent=query_intent,
-        query_entities=len(query_entities),
-        rerank_applied=bool(merged),
+        query_intent="semantic",
+        query_entities=0,
+        rerank_applied=False,
         retrieval_error=retrieval_error,
     )
     return RetrievalResult(hits=final_hits, diagnostics=diagnostics)
