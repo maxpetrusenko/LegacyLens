@@ -75,9 +75,6 @@ async function runQuery(query) {
     renderSources(payload.sources || []);
     renderDiagnostics(payload.diagnostics || {});
     updateCharts(payload.diagnostics || {});
-    if (payload.diagnostics?.retrieval_error) {
-      renderQueryError("Semantic index unavailable for this query. Showing fallback results.");
-    }
     setStatus("Ready");
   } catch (error) {
     renderAnswer("Query failed.");
