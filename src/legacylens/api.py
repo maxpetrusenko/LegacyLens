@@ -27,9 +27,14 @@ app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 def _default_codebase_path(explicit: str | None) -> str:
     if explicit:
         return explicit
-    packaged_sample = Path("tests/testsuite.src")
-    if packaged_sample.exists():
-        return str(packaged_sample)
+    candidates = [
+        Path(__file__).resolve().parent / "sample_codebase",
+        Path("tests/testsuite.src"),
+        Path("/app/tests/testsuite.src"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return str(path)
     return "."
 
 
@@ -48,6 +53,8 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceRef]
     diagnostics: dict[str, int | float | bool | str | None]
+    confidence_label: str
+    debug_hits: list[SourceRef] | None = None
 
 
 class CallersResponse(BaseModel):
@@ -99,7 +106,7 @@ def meta() -> dict[str, str]:
 
 
 @app.post("/query", response_model=QueryResponse)
-def query_codebase(request: QueryRequest) -> QueryResponse:
+def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
     settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
     hits = retrieval.hits
@@ -112,7 +119,22 @@ def query_codebase(request: QueryRequest) -> QueryResponse:
         )
         for hit in hits
     ]
-    return QueryResponse(answer=answer, sources=sources, diagnostics=asdict(retrieval.diagnostics))
+    top_score = retrieval.diagnostics.top1_score if retrieval.diagnostics else 0.0
+    if top_score >= 0.35:
+        confidence = "high"
+    elif top_score >= 0.15:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    debug_hits = sources[: min(5, len(sources))] if debug else None
+    return QueryResponse(
+        answer=answer,
+        sources=sources,
+        diagnostics=asdict(retrieval.diagnostics),
+        confidence_label=confidence,
+        debug_hits=debug_hits,
+    )
 
 
 @app.get("/callers/{symbol}", response_model=CallersResponse)

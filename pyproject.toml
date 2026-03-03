@@ -28,7 +28,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-legacylens = ["web/*"]
+legacylens = ["web/*", "sample_codebase/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
