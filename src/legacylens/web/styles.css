@@ -181,6 +181,7 @@ kbd {
 .answer-panel,
 .sources-panel,
 .graph-panel,
+.intro-panel,
 .chart-card,
 .stat-card {
   padding: 16px;
@@ -191,6 +192,42 @@ kbd {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.intro-panel h2 {
+  margin-bottom: 8px;
+}
+
+.intro-panel > p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 84ch;
+}
+
+.intro-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.intro-grid article {
+  border: 1px solid #27466d;
+  background: #0b1730;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.intro-grid h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.intro-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .answer-text {
@@ -222,15 +259,93 @@ kbd {
 .sources-list,
 .callers-list {
   margin: 10px 0 0;
-  padding-left: 18px;
   display: grid;
   gap: 7px;
   font: 400 0.8rem/1.4 var(--mono);
 }
 
+.sources-list {
+  padding-left: 0;
+}
+
+.callers-list {
+  padding-left: 18px;
+}
+
 .sources-list li,
 .callers-list li {
   color: #c0d9ff;
+}
+
+.source-item {
+  margin-bottom: 1rem;
+  border: 1px solid #29466d;
+  border-radius: 8px;
+  overflow: hidden;
+  list-style: none;
+  background: #0a162c;
+}
+
+.source-header {
+  background: #10203d;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: var(--mono);
+  border-bottom: 1px solid #28456f;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.source-meta {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.source-action-btn {
+  min-height: 28px;
+  border-radius: 8px;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid #38517d;
+  background: #0d1b34;
+  color: #c9defe;
+  font: 500 0.72rem/1 var(--mono);
+}
+
+.source-action-btn:hover {
+  background: #162846;
+}
+
+.source-body.is-collapsed {
+  display: none;
+}
+
+.source-code {
+  margin: 0;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  background: #091325;
+  color: #d7e8ff;
+  font-family: var(--mono);
+  line-height: 1.45;
+}
+
+.source-code code[class*="language-"],
+.source-code[class*="language-"] {
+  font-family: var(--mono);
+  text-shadow: none;
+  background: transparent;
 }
 
 .graph-form {
@@ -323,6 +438,10 @@ kbd {
 
   .analytics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .intro-grid {
+    grid-template-columns: 1fr;
   }
 
   .stack-mobile {

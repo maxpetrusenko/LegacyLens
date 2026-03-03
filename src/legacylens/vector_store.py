@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
 
@@ -36,13 +38,7 @@ class QdrantStore:
         self.client.upsert(collection_name=self.collection_name, points=points)
 
     def search(self, vector: list[float], limit: int) -> list[RetrievalHit]:
-        response = self.client.query_points(
-            collection_name=self.collection_name,
-            query=vector,
-            limit=limit,
-            with_payload=True,
-        )
-        results = response.points
+        results = self._query_points_compat(vector, limit)
         hits: list[RetrievalHit] = []
         for result in results:
             payload = dict(result.payload or {})
@@ -57,6 +53,27 @@ class QdrantStore:
                 )
             )
         return hits
+
+    def _query_points_compat(self, vector: list[float], limit: int) -> list[Any]:
+        try:
+            response = self.client.query_points(
+                collection_name=self.collection_name,
+                query=vector,
+                limit=limit,
+                with_payload=True,
+            )
+            return list(response.points)
+        except Exception as exc:
+            message = str(exc)
+            if "404" not in message and "Not Found" not in message:
+                raise
+            legacy = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=vector,
+                limit=limit,
+                with_payload=True,
+            )
+            return list(legacy)
 
     def iter_payloads(self, batch_size: int = 256) -> list[dict]:
         payloads: list[dict] = []
