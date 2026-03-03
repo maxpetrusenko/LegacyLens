@@ -33,6 +33,14 @@ def is_low_confidence(hits: list[RetrievalHit], tau: float, delta: float) -> boo
     return top1 < tau or (top1 - top5) < delta
 
 
+def classify_confidence(top1_score: float, low_threshold: float, medium_threshold: float) -> str:
+    if top1_score < low_threshold:
+        return "low"
+    if top1_score < medium_threshold:
+        return "medium"
+    return "high"
+
+
 def dedupe_hits(hits: list[RetrievalHit]) -> list[RetrievalHit]:
     deduped: dict[tuple[str, int], RetrievalHit] = {}
     for hit in hits:
@@ -85,6 +93,19 @@ def parse_query_intent_entities(query: str) -> tuple[str, list[str], str]:
     return intent, entities, expanded_query
 
 
+def is_structural_query(query: str) -> bool:
+    lowered = query.lower()
+    structural_keywords = (
+        "entry point",
+        "entrypoint",
+        "main program",
+        "program-id",
+        "bootstrap",
+        "start here",
+    )
+    return any(keyword in lowered for keyword in structural_keywords)
+
+
 def _expand_context(codebase_path: Path, hit: RetrievalHit, expand_lines: int) -> str:
     target_file = codebase_path / hit.file_path
     try:
@@ -106,7 +127,7 @@ def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[R
             check=False,
         )
     except FileNotFoundError:
-        return []
+        return _python_keyword_fallback(query, codebase_path, limit)
 
     hits: list[RetrievalHit] = []
     for line in result.stdout.splitlines():
@@ -133,6 +154,37 @@ def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[R
                 metadata={"source": "ripgrep"},
             )
         )
+    return hits
+
+
+def _python_keyword_fallback(query: str, codebase_path: Path, limit: int) -> list[RetrievalHit]:
+    lowered = query.lower()
+    if not lowered:
+        return []
+    hits: list[RetrievalHit] = []
+    patterns = {".cob", ".cbl", ".cpy", ".cobol"}
+    for file_path in codebase_path.rglob("*"):
+        if not file_path.is_file() or file_path.suffix.lower() not in patterns:
+            continue
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if lowered in line.lower():
+                rel_path = str(file_path.relative_to(codebase_path))
+                hits.append(
+                    RetrievalHit(
+                        file_path=rel_path,
+                        line_start=idx,
+                        line_end=idx,
+                        text=line.strip(),
+                        score=0.3,
+                        metadata={"source": "python_fallback"},
+                    )
+                )
+                if len(hits) >= limit:
+                    return hits
     return hits
 
 
@@ -260,13 +312,19 @@ def retrieve_with_diagnostics(
                 metadata=hit.metadata,
             )
         )
+    top1_score = semantic_hits[0].score if semantic_hits else 0.0
     diagnostics = RetrievalDiagnostics(
         latency_ms=int((perf_counter() - started) * 1000),
-        top1_score=semantic_hits[0].score if semantic_hits else 0.0,
+        top1_score=top1_score,
         chunks_returned=len(final_hits),
         hybrid_triggered=hybrid_triggered,
         semantic_hits=len(semantic_hits),
         fallback_hits=len(fallback_hits),
+        confidence_level=classify_confidence(
+            top1_score,
+            settings.confidence_low_threshold,
+            settings.confidence_medium_threshold,
+        ),
         query_intent=query_intent,
         query_entities=len(query_entities),
         rerank_applied=bool(merged),
@@ -282,8 +340,10 @@ def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) 
 __all__ = [
     "format_citation",
     "is_low_confidence",
+    "classify_confidence",
     "dedupe_hits",
     "keyword_fallback",
+    "is_structural_query",
     "parse_query_intent_entities",
     "rerank_hits",
     "retrieve",

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from legacylens.api import app
 from legacylens.dependency_graph import save_callers_index
-from legacylens.models import RetrievalDiagnostics, RetrievalResult
+from legacylens.models import RetrievalDiagnostics, RetrievalHit, RetrievalResult
 
 
 client = TestClient(app)
@@ -45,6 +45,7 @@ def test_query_returns_empty_sources_when_semantic_retrieval_times_out(monkeypat
                 hybrid_triggered=True,
                 semantic_hits=0,
                 fallback_hits=0,
+                confidence_level="low",
                 query_intent="general",
                 query_entities=0,
                 rerank_applied=False,
@@ -68,6 +69,7 @@ def test_query_returns_empty_sources_when_semantic_retrieval_times_out(monkeypat
             "hybrid_triggered": True,
             "semantic_hits": 0,
             "fallback_hits": 0,
+            "confidence_level": "low",
             "query_intent": "general",
             "query_entities": 0,
             "rerank_applied": False,
@@ -100,6 +102,7 @@ def test_query_debug_mode_returns_debug_hits(monkeypatch) -> None:
                 hybrid_triggered=False,
                 semantic_hits=1,
                 fallback_hits=0,
+                confidence_level="high",
                 query_intent="general",
                 query_entities=0,
                 rerank_applied=True,
@@ -116,3 +119,27 @@ def test_query_debug_mode_returns_debug_hits(monkeypatch) -> None:
     assert payload["debug_hits"] is not None
     assert len(payload["debug_hits"]) == 1
     assert payload["debug_hits"][0]["text"] == "STOP RUN."
+
+
+def test_query_structural_route_returns_entrypoint_candidates(monkeypatch) -> None:
+    monkeypatch.setattr("legacylens.api.is_structural_query", lambda _query: True)
+    monkeypatch.setattr(
+        "legacylens.api.find_entry_point_hits",
+        lambda settings, limit: [
+            RetrievalHit(
+                file_path="sample.cob",
+                line_start=1,
+                line_end=6,
+                text="PROGRAM-ID. SAMPLE.\nPROCEDURE DIVISION.\nSTOP RUN.",
+                score=0.62,
+                metadata={"source": "structural"},
+            )
+        ],
+    )
+
+    response = client.post("/query", json={"query": "what is entry point"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["confidence_label"] == "high"
+    assert payload["diagnostics"]["query_intent"] == "structural_entry_point"
+    assert len(payload["sources"]) == 1

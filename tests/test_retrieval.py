@@ -1,6 +1,15 @@
 from legacylens.models import RetrievalHit
 from legacylens.config import Settings
-from legacylens.retrieval import dedupe_hits, format_citation, is_low_confidence, retrieve_with_diagnostics
+from legacylens.retrieval import (
+    classify_confidence,
+    dedupe_hits,
+    format_citation,
+    is_low_confidence,
+    keyword_fallback,
+    parse_query_intent_entities,
+    rerank_hits,
+    retrieve_with_diagnostics,
+)
 
 
 def test_formats_citations() -> None:
@@ -29,6 +38,12 @@ def test_low_confidence_with_flat_scores() -> None:
     assert is_low_confidence(hits, tau=0.65, delta=0.15) is True
 
 
+def test_classify_confidence_thresholds() -> None:
+    assert classify_confidence(0.12, low_threshold=0.15, medium_threshold=0.35) == "low"
+    assert classify_confidence(0.20, low_threshold=0.15, medium_threshold=0.35) == "medium"
+    assert classify_confidence(0.55, low_threshold=0.15, medium_threshold=0.35) == "high"
+
+
 def test_retrieve_with_diagnostics_gracefully_handles_missing_qdrant(tmp_path) -> None:
     codebase = tmp_path / "repo"
     codebase.mkdir()
@@ -37,3 +52,37 @@ def test_retrieve_with_diagnostics_gracefully_handles_missing_qdrant(tmp_path) -
     result = retrieve_with_diagnostics("STOP RUN", settings, codebase)
     assert result.diagnostics.hybrid_triggered is True
     assert result.diagnostics.retrieval_error is not None
+    assert result.diagnostics.confidence_level == "low"
+    assert result.diagnostics.query_intent == "general"
+
+
+def test_parse_query_intent_entities_dependency() -> None:
+    intent, entities, expanded = parse_query_intent_entities("who calls 'READ-FILE' in sample.cob?")
+    assert intent == "dependency"
+    assert "READ-FILE" in entities
+    assert "sample.cob" in entities
+    assert "READ-FILE" in expanded
+
+
+def test_rerank_hits_boosts_entity_matches() -> None:
+    hits = [
+        RetrievalHit("x.cob", 1, 2, "PERFORM OTHER-PARA.", 0.9, {"tags": []}),
+        RetrievalHit("x.cob", 3, 4, "PERFORM READ-FILE.", 0.7, {"tags": []}),
+    ]
+    reranked = rerank_hits(hits, "where is READ-FILE performed?", "dependency", ["READ-FILE"])
+    assert reranked[0].text == "PERFORM READ-FILE."
+    assert "rerank_score" in reranked[0].metadata
+
+
+def test_keyword_fallback_uses_python_scan_when_rg_missing(tmp_path, monkeypatch) -> None:
+    codebase = tmp_path / "repo"
+    codebase.mkdir()
+    (codebase / "sample.cob").write_text("PROCEDURE DIVISION.\nSTOP RUN.\n", encoding="utf-8")
+
+    def _raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr("legacylens.retrieval.subprocess.run", _raise_file_not_found)
+    hits = keyword_fallback("STOP RUN", codebase, limit=10)
+    assert len(hits) == 1
+    assert hits[0].file_path == "sample.cob"
