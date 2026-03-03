@@ -9,7 +9,7 @@ import re
 from time import perf_counter
 
 from legacylens.config import Settings
-from legacylens.embeddings import build_embedding_provider
+from legacylens.embeddings import LocalHashEmbeddingProvider, build_embedding_provider
 from legacylens.models import RetrievalDiagnostics, RetrievalHit, RetrievalResult
 from legacylens.vector_store import QdrantStore
 
@@ -84,6 +84,12 @@ def parse_query_intent_entities(query: str) -> tuple[str, list[str], str]:
     for token in WORD_PATTERN.findall(normalized_query):
         if "-" in token and len(token) > 2:
             entity = _normalize_entity(token)
+            if entity not in entities:
+                entities.append(entity)
+
+    if is_structural_query(normalized_query):
+        structural_entities = ["PROGRAM-ID", "PROCEDURE DIVISION", "MAIN", "ENTRY", "START", "INIT", "STOP RUN", "GOBACK"]
+        for entity in structural_entities:
             if entity not in entities:
                 entities.append(entity)
 
@@ -282,10 +288,30 @@ def retrieve_with_diagnostics(
 
     try:
         def _semantic_retrieve() -> list[RetrievalHit]:
-            provider = build_embedding_provider(settings)
             store = QdrantStore(settings)
-            vector = _embed_query_cached(expanded_query, settings, provider)
-            return store.search(vector, settings.top_k)
+            errors: list[str] = []
+
+            try:
+                provider = build_embedding_provider(settings)
+                vector = _embed_query_cached(expanded_query, settings, provider)
+                hits = store.search(vector, settings.top_k)
+                if hits:
+                    return hits
+            except Exception as exc:
+                errors.append(f"provider_semantic_failed={exc}")
+
+            try:
+                fallback_provider = LocalHashEmbeddingProvider()
+                fallback_vector = fallback_provider.embed_query(expanded_query)
+                fallback_hits = store.search(fallback_vector, settings.top_k)
+                if fallback_hits:
+                    return fallback_hits
+            except Exception as exc:
+                errors.append(f"local_hash_semantic_failed={exc}")
+
+            if errors:
+                raise RuntimeError("; ".join(errors))
+            return []
 
         pool = ThreadPoolExecutor(max_workers=1)
         future = pool.submit(_semantic_retrieve)

@@ -64,6 +64,14 @@ def test_parse_query_intent_entities_dependency() -> None:
     assert "READ-FILE" in expanded
 
 
+def test_parse_query_intent_entities_entry_point_expands_structural_terms() -> None:
+    intent, entities, expanded = parse_query_intent_entities("what is entry point")
+    assert intent == "general"
+    assert "PROGRAM-ID" in entities
+    assert "STOP RUN" in entities
+    assert "PROGRAM-ID" in expanded
+
+
 def test_rerank_hits_boosts_entity_matches() -> None:
     hits = [
         RetrievalHit("x.cob", 1, 2, "PERFORM OTHER-PARA.", 0.9, {"tags": []}),

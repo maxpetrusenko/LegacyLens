@@ -111,6 +111,7 @@ def test_query_debug_mode_returns_debug_hits(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("legacylens.api.retrieve_with_diagnostics", fake_retrieve_with_diagnostics)
+    monkeypatch.setattr("legacylens.api.generate_answer", lambda *args, **kwargs: "mock answer")
 
     response = client.post("/query?debug=true", json={"query": "where stop run"})
     assert response.status_code == 200
