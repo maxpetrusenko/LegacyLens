@@ -1,87 +1,112 @@
+import { getCallers, getGraph, queryCodebase } from "./api-client.js";
+import { initCharts, updateCharts } from "./charts.js";
+import { renderGraph } from "./graph.js";
+import {
+  clearQueryLoading,
+  renderAnswer,
+  renderCallers,
+  renderDiagnostics,
+  renderQueryError,
+  renderSources,
+  setGraphEmpty,
+  setQueryLoading,
+  setStatus,
+} from "./ui.js";
+
 const queryForm = document.getElementById("query-form");
-const callersForm = document.getElementById("callers-form");
 const queryInput = document.getElementById("query-input");
+const graphForm = document.getElementById("graph-form");
 const symbolInput = document.getElementById("symbol-input");
-const answerText = document.getElementById("answer-text");
-const sourcesList = document.getElementById("sources-list");
-const callersList = document.getElementById("callers-list");
-const statusBadge = document.getElementById("status-badge");
-const diagError = document.getElementById("diag-error");
-const diagList = document.getElementById("diag-list");
+const chips = document.querySelectorAll(".chip");
+let chartLibReady = false;
+let graphLibReady = false;
 
-function setStatus(label) {
-  statusBadge.textContent = label;
-}
-
-function setDiag(key, value) {
-  const map = {
-    latency_ms: "Latency",
-    top1_score: "Top1 Score",
-    hybrid_triggered: "Hybrid",
-    semantic_hits: "Semantic Hits",
-    fallback_hits: "Fallback Hits",
-  };
-  for (const row of diagList.querySelectorAll("div")) {
-    if (row.firstElementChild.textContent === map[key]) {
-      row.lastElementChild.textContent = String(value);
-    }
-  }
-}
-
-async function runQuery(question) {
-  setStatus("Searching");
-  diagError.textContent = "";
-  sourcesList.innerHTML = "";
-  answerText.textContent = "Loading...";
-  try {
-    const res = await fetch("/query", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query: question }),
-    });
-    const payload = await res.json();
-    answerText.textContent = payload.answer ?? "No answer.";
-    for (const source of payload.sources ?? []) {
-      const li = document.createElement("li");
-      li.textContent = `${source.citation} (score: ${Number(source.score).toFixed(4)})`;
-      sourcesList.appendChild(li);
-    }
-    const d = payload.diagnostics ?? {};
-    setDiag("latency_ms", d.latency_ms ?? "-");
-    setDiag("top1_score", d.top1_score ?? "-");
-    setDiag("hybrid_triggered", d.hybrid_triggered ?? "-");
-    setDiag("semantic_hits", d.semantic_hits ?? "-");
-    setDiag("fallback_hits", d.fallback_hits ?? "-");
-    diagError.textContent = d.retrieval_error || "";
-    setStatus("Done");
-  } catch (error) {
-    answerText.textContent = "Query failed.";
-    diagError.textContent = String(error);
-    setStatus("Error");
-  }
-}
-
-async function lookupCallers(symbol) {
-  callersList.innerHTML = "";
-  try {
-    const res = await fetch(`/callers/${encodeURIComponent(symbol)}`);
-    const payload = await res.json();
-    const callers = payload.callers ?? [];
-    if (!callers.length) {
-      const li = document.createElement("li");
-      li.textContent = "No callers found.";
-      callersList.appendChild(li);
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), { once: true });
       return;
     }
-    for (const caller of callers) {
-      const li = document.createElement("li");
-      li.textContent = caller;
-      callersList.appendChild(li);
+    const script = document.createElement("script");
+    script.src = src;
+    script.defer = true;
+    script.dataset.src = src;
+    script.addEventListener("load", () => {
+      script.dataset.loaded = "true";
+      resolve();
+    });
+    script.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureChartLib() {
+  if (chartLibReady) {
+    return;
+  }
+  await loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js");
+  initCharts();
+  chartLibReady = true;
+}
+
+async function ensureGraphLib() {
+  if (graphLibReady) {
+    return;
+  }
+  await loadScript("https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js");
+  graphLibReady = true;
+}
+
+async function runQuery(query) {
+  if (!query) {
+    return;
+  }
+  setQueryLoading();
+  try {
+    const payload = await queryCodebase(query);
+    await ensureChartLib();
+    renderAnswer(payload.answer);
+    renderSources(payload.sources || []);
+    renderDiagnostics(payload.diagnostics || {});
+    updateCharts(payload.diagnostics || {});
+    if (payload.diagnostics?.retrieval_error) {
+      renderQueryError(payload.diagnostics.retrieval_error);
     }
+    setStatus("Ready");
   } catch (error) {
-    const li = document.createElement("li");
-    li.textContent = `Lookup failed: ${String(error)}`;
-    callersList.appendChild(li);
+    renderAnswer("Query failed.");
+    renderSources([]);
+    renderDiagnostics({});
+    updateCharts({});
+    renderQueryError(error);
+    setStatus("Error");
+  } finally {
+    clearQueryLoading();
+  }
+}
+
+async function runGraphLookup(symbol) {
+  if (!symbol) {
+    return;
+  }
+  setStatus("Mapping");
+  try {
+    await ensureGraphLib();
+    const [callersData, graphData] = await Promise.all([getCallers(symbol), getGraph(symbol)]);
+    renderCallers(callersData.callers || []);
+    renderGraph(graphData);
+    setGraphEmpty(!(graphData.edges || []).length);
+    setStatus("Ready");
+  } catch (error) {
+    renderCallers([`Lookup failed: ${String(error)}`]);
+    setGraphEmpty(true);
+    setStatus("Error");
   }
 }
 
@@ -90,15 +115,31 @@ queryForm.addEventListener("submit", async (event) => {
   await runQuery(queryInput.value.trim());
 });
 
-callersForm.addEventListener("submit", async (event) => {
+graphForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await lookupCallers(symbolInput.value.trim());
+  await runGraphLookup(symbolInput.value.trim());
 });
 
-for (const chip of document.querySelectorAll(".chip")) {
+for (const chip of chips) {
   chip.addEventListener("click", async () => {
-    const q = chip.dataset.q;
+    const q = chip.dataset.q || "";
     queryInput.value = q;
     await runQuery(q);
   });
 }
+
+document.addEventListener("keydown", async (event) => {
+  const activeTag = document.activeElement?.tagName || "";
+  const inInput = activeTag === "INPUT" || activeTag === "TEXTAREA";
+  if (event.key === "/" && !inInput) {
+    event.preventDefault();
+    queryInput.focus();
+  }
+  if (event.key === "Enter" && document.activeElement === queryInput && !event.shiftKey) {
+    event.preventDefault();
+    await runQuery(queryInput.value.trim());
+  }
+});
+
+setStatus("Ready");
+setGraphEmpty(true);

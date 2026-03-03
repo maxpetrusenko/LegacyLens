@@ -8,7 +8,7 @@ from pathlib import Path
 from legacylens.models import CodeChunk
 
 
-def _normalize_called_symbol(raw_symbol: str) -> str | None:
+def normalize_called_symbol(raw_symbol: str) -> str | None:
     normalized: str | None = None
     if raw_symbol.startswith("PERFORM "):
         normalized = raw_symbol.removeprefix("PERFORM ").strip().upper()
@@ -28,7 +28,7 @@ def build_callers_index(chunks: list[CodeChunk]) -> dict[str, list[str]]:
             continue
         caller = chunk.symbol_name.upper()
         for raw_symbol in chunk.symbols_used:
-            called_symbol = _normalize_called_symbol(raw_symbol)
+            called_symbol = normalize_called_symbol(raw_symbol)
             if not called_symbol:
                 continue
             callers_by_symbol[called_symbol].add(caller)
@@ -56,9 +56,50 @@ def find_callers(symbol_name: str, graph_path: Path) -> list[str]:
     return callers_by_symbol.get(symbol_name.upper(), [])
 
 
+def build_edges_from_payloads(payloads: list[dict]) -> list[tuple[str, str]]:
+    edges: set[tuple[str, str]] = set()
+    for payload in payloads:
+        raw_caller = payload.get("symbol_name")
+        if not isinstance(raw_caller, str) or not raw_caller:
+            continue
+        caller = raw_caller.upper()
+        raw_used = payload.get("symbols_used", [])
+        if not isinstance(raw_used, list):
+            continue
+        for raw_symbol in raw_used:
+            callee = normalize_called_symbol(str(raw_symbol))
+            if not callee:
+                continue
+            edges.add((caller, callee))
+    return sorted(edges)
+
+
+def find_symbol_neighborhood(
+    symbol_name: str, edges: list[tuple[str, str]], max_edges: int = 120
+) -> tuple[list[str], list[tuple[str, str]]]:
+    target = symbol_name.upper()
+    if not target:
+        return [], []
+    incoming = [edge for edge in edges if edge[1] == target]
+    outgoing = [edge for edge in edges if edge[0] == target]
+    neighbors = {target}
+    for source, _ in incoming:
+        neighbors.add(source)
+    for _, sink in outgoing:
+        neighbors.add(sink)
+
+    expanded = [edge for edge in edges if edge[0] in neighbors and edge[1] in neighbors]
+    selected_edges = (incoming + outgoing + expanded)[:max_edges]
+    selected_nodes = sorted({node for edge in selected_edges for node in edge} | {target})
+    return selected_nodes, selected_edges
+
+
 __all__ = [
     "build_callers_index",
+    "build_edges_from_payloads",
     "save_callers_index",
     "load_callers_index",
     "find_callers",
+    "find_symbol_neighborhood",
+    "normalize_called_symbol",
 ]

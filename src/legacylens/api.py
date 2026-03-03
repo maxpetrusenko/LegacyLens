@@ -10,7 +10,12 @@ from pydantic import BaseModel, Field
 
 from legacylens.answer import generate_answer
 from legacylens.config import Settings
-from legacylens.dependency_graph import find_callers
+from legacylens.dependency_graph import (
+    build_edges_from_payloads,
+    find_callers,
+    find_symbol_neighborhood,
+    load_callers_index,
+)
 from legacylens.retrieval import format_citation, retrieve_with_diagnostics
 from legacylens.vector_store import QdrantStore
 
@@ -40,6 +45,23 @@ class CallersResponse(BaseModel):
     callers: list[str]
 
 
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    role: str
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+
+
+class GraphResponse(BaseModel):
+    symbol: str
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -58,6 +80,7 @@ def meta() -> dict[str, str]:
         "health": "/health",
         "query": "/query",
         "callers": "/callers/{symbol}",
+        "graph": "/graph/{symbol}",
         "docs": "/docs",
     }
 
@@ -101,3 +124,32 @@ def callers(symbol: str, codebase_path: str | None = None) -> CallersResponse:
         return CallersResponse(symbol=normalized, callers=sorted(callers_from_vector))
     except Exception:
         return CallersResponse(symbol=normalized, callers=[])
+
+
+@app.get("/graph/{symbol}", response_model=GraphResponse)
+def graph(symbol: str, codebase_path: str | None = None) -> GraphResponse:
+    normalized = symbol.upper()
+    settings = Settings(codebase_path=codebase_path or ".")
+    graph_path = Path(settings.codebase_path) / settings.dependency_graph_file
+    callers_index = load_callers_index(graph_path)
+    index_edges = [(caller.upper(), callee.upper()) for callee, callers in callers_index.items() for caller in callers]
+
+    payload_edges: list[tuple[str, str]] = []
+    try:
+        store = QdrantStore(settings)
+        payload_edges = build_edges_from_payloads(store.iter_payloads())
+    except Exception:
+        payload_edges = []
+
+    all_edges = sorted(set(index_edges + payload_edges))
+    nodes, edges = find_symbol_neighborhood(normalized, all_edges)
+    if not edges and normalized:
+        callers_list = callers_index.get(normalized, [])
+        edges = [(caller.upper(), normalized) for caller in callers_list]
+        nodes = sorted({normalized, *[caller.upper() for caller in callers_list]})
+
+    graph_nodes = [
+        GraphNode(id=node, label=node, role="target" if node == normalized else "related") for node in nodes
+    ]
+    graph_edges = [GraphEdge(source=source, target=target) for source, target in edges]
+    return GraphResponse(symbol=normalized, nodes=graph_nodes, edges=graph_edges)

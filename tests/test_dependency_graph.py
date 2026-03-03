@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from legacylens.dependency_graph import build_callers_index, find_callers, save_callers_index
+from legacylens.dependency_graph import (
+    build_callers_index,
+    build_edges_from_payloads,
+    find_callers,
+    find_symbol_neighborhood,
+    save_callers_index,
+)
 from legacylens.models import CodeChunk
 
 
@@ -38,3 +44,17 @@ def test_build_callers_index_and_lookup(tmp_path: Path) -> None:
     graph_path = tmp_path / ".legacylens" / "dependency_graph.json"
     save_callers_index(graph_path, callers)
     assert find_callers("read-file", graph_path) == ["MAIN", "WORKER"]
+
+
+def test_build_edges_and_neighborhood() -> None:
+    payloads = [
+        {"symbol_name": "main", "symbols_used": ["PERFORM READ-FILE", "CALL 'LIBCALC'"]},
+        {"symbol_name": "worker", "symbols_used": ["PERFORM READ-FILE"]},
+        {"symbol_name": "read-file", "symbols_used": ["CALL 'LIBCALC'"]},
+    ]
+    edges = build_edges_from_payloads(payloads)
+    assert ("MAIN", "READ-FILE") in edges
+    assert ("MAIN", "LIBCALC") in edges
+    nodes, neighborhood_edges = find_symbol_neighborhood("read-file", edges)
+    assert "READ-FILE" in nodes
+    assert ("MAIN", "READ-FILE") in neighborhood_edges

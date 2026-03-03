@@ -3,84 +3,109 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LegacyLens | COBOL Intelligence Console</title>
+    <title>LegacyLens | Legacy Academy Console</title>
     <meta
       name="description"
-      content="Query legacy COBOL systems with retrieval-backed answers, citations, and caller maps."
+      content="LegacyLens analytical console for COBOL retrieval, citations, dependency mapping, and diagnostics."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <div class="bg-grid" aria-hidden="true"></div>
-    <main class="page-shell">
-      <header class="hero">
-        <p class="kicker">LegacyLens</p>
-        <h1>COBOL Intelligence Console</h1>
-        <p class="subtitle">
-          Retrieval-first code understanding with file-level citations and caller mapping.
-        </p>
-      </header>
-
-      <section class="card query-card">
-        <div class="card-head">
-          <h2>Ask the Codebase</h2>
+    <div class="ambient" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="hero panel">
+        <div class="hero-head">
+          <p class="kicker">LegacyLens Academy</p>
           <span id="status-badge" class="badge">Ready</span>
         </div>
-        <form id="query-form" class="query-form">
-          <label class="field">
-            <span>Question</span>
-            <input
-              id="query-input"
-              type="text"
-              placeholder="e.g. Where is file I/O handled?"
-              required
-            />
-          </label>
+        <h1>COBOL Query Console</h1>
+        <p class="subtitle">Ask questions, inspect evidence, and map call dependencies in one workflow.</p>
+        <form id="query-form" class="query-console">
+          <input
+            id="query-input"
+            type="text"
+            placeholder="Ask about file I/O, batch jobs, error handling, entrypoints..."
+            autocomplete="off"
+            required
+          />
           <button id="ask-btn" type="submit">Run Query</button>
         </form>
-        <div class="chips">
-          <button class="chip" data-q="STOP RUN">STOP RUN usage</button>
-          <button class="chip" data-q="OPEN INPUT">File open patterns</button>
-          <button class="chip" data-q="CALL 'DUMP'">External calls</button>
+        <div class="quick-row" role="list" aria-label="Quick prompts">
+          <button type="button" class="chip" data-q="Where is file I/O handled?">I/O flow</button>
+          <button type="button" class="chip" data-q="What calls DUMP?">DUMP callers</button>
+          <button type="button" class="chip" data-q="How does STOP RUN terminate processing?">STOP RUN path</button>
+          <span class="hint">Shortcut: <kbd>/</kbd> focus, <kbd>Enter</kbd> run</span>
         </div>
-      </section>
+      </header>
 
-      <section class="layout">
-        <article class="card output-card">
-          <h3>Answer</h3>
-          <pre id="answer-text">No query yet.</pre>
-          <h4>Sources</h4>
-          <ul id="sources-list" class="sources-list"></ul>
+      <section class="results-grid">
+        <article class="panel answer-panel">
+          <div class="panel-head">
+            <h2>Answer</h2>
+          </div>
+          <pre id="answer-text" class="answer-text">Run a query to see synthesized output.</pre>
+          <p id="query-error" class="state error"></p>
         </article>
 
-        <aside class="card diag-card">
-          <h3>Retrieval Diagnostics</h3>
-          <dl id="diag-list" class="diag-list">
-            <div><dt>Latency</dt><dd>-</dd></div>
-            <div><dt>Top1 Score</dt><dd>-</dd></div>
-            <div><dt>Hybrid</dt><dd>-</dd></div>
-            <div><dt>Semantic Hits</dt><dd>-</dd></div>
-            <div><dt>Fallback Hits</dt><dd>-</dd></div>
-          </dl>
-          <p id="diag-error" class="diag-error"></p>
+        <aside class="panel sources-panel">
+          <div class="panel-head">
+            <h2>Matched Sources</h2>
+          </div>
+          <ul id="sources-list" class="sources-list"></ul>
+          <p id="sources-empty" class="state empty">No sources yet.</p>
         </aside>
       </section>
 
-      <section class="card callers-card">
-        <h3>Who Calls Symbol</h3>
-        <form id="callers-form" class="callers-form">
-          <input id="symbol-input" type="text" placeholder="e.g. DUMP" required />
-          <button type="submit">Lookup Callers</button>
-        </form>
+      <section class="panel graph-panel">
+        <div class="panel-head stack-mobile">
+          <h2>Dependency Graph</h2>
+          <form id="graph-form" class="graph-form">
+            <input id="symbol-input" type="text" placeholder="Symbol, e.g. DUMP" required />
+            <button type="submit">Map</button>
+          </form>
+        </div>
+        <div id="graph-view" class="graph-view" role="img" aria-label="Caller dependency graph"></div>
         <ul id="callers-list" class="callers-list"></ul>
+        <p id="graph-empty" class="state empty">Lookup a symbol to render graph topology.</p>
+      </section>
+
+      <section class="analytics-grid">
+        <article class="panel stat-card">
+          <p>Latency</p>
+          <strong id="stat-latency">-</strong>
+        </article>
+        <article class="panel stat-card">
+          <p>Top Score</p>
+          <strong id="stat-top1">-</strong>
+        </article>
+        <article class="panel stat-card">
+          <p>Hybrid Trigger</p>
+          <strong id="stat-hybrid">-</strong>
+        </article>
+        <article class="panel stat-card">
+          <p>Hit Mix</p>
+          <strong id="stat-hits">-</strong>
+        </article>
+      </section>
+
+      <section class="charts-grid">
+        <article class="panel chart-card">
+          <h3>Hit Distribution</h3>
+          <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+        </article>
+        <article class="panel chart-card">
+          <h3>Score Bands</h3>
+          <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+        </article>
       </section>
     </main>
-    <script src="/assets/app.js" defer></script>
+
+    <script type="module" src="/assets/app.js"></script>
   </body>
-  </html>
+</html>
