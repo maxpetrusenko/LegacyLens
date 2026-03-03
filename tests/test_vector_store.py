@@ -7,13 +7,16 @@ from legacylens.vector_store import QdrantStore
 class _CompatClient:
     def __init__(self) -> None:
         self.search_called = False
+        self.http = SimpleNamespace(search_api=SimpleNamespace(search_points=self._search_points))
 
     def query_points(self, **_kwargs):
         raise RuntimeError('Unexpected Response: 404 (Not Found)')
 
-    def search(self, **_kwargs):
+    def _search_points(self, **_kwargs):
         self.search_called = True
-        return [SimpleNamespace(payload={"file_path": "x.cob", "line_start": 1, "line_end": 2, "text": "MOVE A TO B"}, score=0.42)]
+        return SimpleNamespace(
+            result=[SimpleNamespace(payload={"file_path": "x.cob", "line_start": 1, "line_end": 2, "text": "MOVE A TO B"}, score=0.42)]
+        )
 
 
 class _ModernClient:

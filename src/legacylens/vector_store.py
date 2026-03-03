@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, PointStruct, VectorParams
+from qdrant_client.http.models import Distance, PointStruct, SearchRequest, VectorParams
 
 from legacylens.config import Settings
 from legacylens.models import CodeChunk, RetrievalHit
@@ -67,13 +67,15 @@ class QdrantStore:
             message = str(exc)
             if "404" not in message and "Not Found" not in message:
                 raise
-            legacy = self.client.search(
+            legacy = self.client.http.search_api.search_points(
                 collection_name=self.collection_name,
-                query_vector=vector,
-                limit=limit,
-                with_payload=True,
+                search_request=SearchRequest(
+                    vector=vector,
+                    limit=limit,
+                    with_payload=True,
+                ),
             )
-            return list(legacy)
+            return list(legacy.result or [])
 
     def iter_payloads(self, batch_size: int = 256) -> list[dict]:
         payloads: list[dict] = []
