@@ -4,6 +4,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from legacylens.answer import generate_answer
@@ -12,6 +14,8 @@ from legacylens.dependency_graph import find_callers
 from legacylens.retrieval import format_citation, retrieve_with_diagnostics
 
 app = FastAPI(title="LegacyLens MVP")
+WEB_DIR = Path(__file__).parent / "web"
+app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
 
 class QueryRequest(BaseModel):
@@ -41,7 +45,12 @@ def health() -> dict[str, str]:
 
 
 @app.get("/")
-def root() -> dict[str, str]:
+def root() -> FileResponse:
+    return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/meta")
+def meta() -> dict[str, str]:
     return {
         "service": "LegacyLens API",
         "status": "ok",

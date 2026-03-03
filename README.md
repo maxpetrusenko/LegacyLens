@@ -64,6 +64,8 @@ uvicorn legacylens.api:app --reload
 Then:
 
 ```bash
+open http://127.0.0.1:8000/
+
 curl -X POST http://127.0.0.1:8000/query \
   -H "content-type: application/json" \
   -d '{"query":"what paragraphs call LIBCALC?","codebase_path":"/path/to/cobol"}'
