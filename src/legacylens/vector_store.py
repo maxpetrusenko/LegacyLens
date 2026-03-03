@@ -12,7 +12,11 @@ from legacylens.models import CodeChunk, RetrievalHit
 class QdrantStore:
     def __init__(self, settings: Settings) -> None:
         self.collection_name = settings.qdrant_collection
-        self.client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+        self.client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=settings.qdrant_timeout_sec,
+        )
 
     def ensure_collection(self, vector_size: int) -> None:
         collections = self.client.get_collections().collections

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
     qdrant_collection: str = "legacylens_chunks"
+    qdrant_timeout_sec: float = 1.2
     embed_provider: str = "auto"
     voyage_api_key: str | None = None
     voyage_model: str = "voyage-code-2"
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
     context_expand_lines: int = 10
     query_cache_size: int = 256
     dependency_graph_file: str = ".legacylens/dependency_graph.json"
+    target_min_files: int = 50
+    target_min_loc: int = 10000
 
 
 __all__ = ["Settings"]
