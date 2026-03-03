@@ -84,6 +84,7 @@ def root() -> FileResponse:
 
 @app.get("/meta")
 def meta() -> dict[str, str]:
+    default_codebase = _default_codebase_path(None)
     return {
         "service": "LegacyLens API",
         "status": "ok",
@@ -91,6 +92,8 @@ def meta() -> dict[str, str]:
         "query": "/query",
         "callers": "/callers/{symbol}",
         "graph": "/graph/{symbol}",
+        "default_codebase": default_codebase,
+        "default_codebase_exists": str(Path(default_codebase).exists()).lower(),
         "docs": "/docs",
     }
 
