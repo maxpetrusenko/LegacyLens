@@ -86,3 +86,17 @@ def test_keyword_fallback_uses_python_scan_when_rg_missing(tmp_path, monkeypatch
     hits = keyword_fallback("STOP RUN", codebase, limit=10)
     assert len(hits) == 1
     assert hits[0].file_path == "sample.cob"
+
+
+def test_keyword_fallback_matches_terms_from_natural_language_query(tmp_path, monkeypatch) -> None:
+    codebase = tmp_path / "repo"
+    codebase.mkdir()
+    (codebase / "sample.cob").write_text("PROCEDURE DIVISION.\nSTOP RUN.\n", encoding="utf-8")
+
+    def _raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr("legacylens.retrieval.subprocess.run", _raise_file_not_found)
+    hits = keyword_fallback("where is STOP RUN used?", codebase, limit=10)
+    assert len(hits) >= 1
+    assert hits[0].text.upper().startswith("STOP RUN")

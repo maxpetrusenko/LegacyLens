@@ -158,9 +158,15 @@ def keyword_fallback(query: str, codebase_path: Path, limit: int = 20) -> list[R
 
 
 def _python_keyword_fallback(query: str, codebase_path: Path, limit: int) -> list[RetrievalHit]:
-    lowered = query.lower()
+    lowered = query.lower().strip()
     if not lowered:
         return []
+    raw_terms = WORD_PATTERN.findall(query)
+    priority_terms = [term for term in raw_terms if "-" in term or term.isupper()]
+    general_terms = [term for term in raw_terms if len(term) >= 3]
+    terms = [term.lower() for term in priority_terms + general_terms]
+    if not terms:
+        terms = [lowered]
     hits: list[RetrievalHit] = []
     patterns = {".cob", ".cbl", ".cpy", ".cobol"}
     for file_path in codebase_path.rglob("*"):
@@ -171,16 +177,19 @@ def _python_keyword_fallback(query: str, codebase_path: Path, limit: int) -> lis
         except Exception:
             continue
         for idx, line in enumerate(lines, start=1):
-            if lowered in line.lower():
+            line_lower = line.lower()
+            matched_terms = [term for term in terms if term in line_lower]
+            if matched_terms:
                 rel_path = str(file_path.relative_to(codebase_path))
+                score = min(0.6, 0.25 + (0.05 * len(matched_terms)))
                 hits.append(
                     RetrievalHit(
                         file_path=rel_path,
                         line_start=idx,
                         line_end=idx,
                         text=line.strip(),
-                        score=0.3,
-                        metadata={"source": "python_fallback"},
+                        score=score,
+                        metadata={"source": "python_fallback", "matched_terms": matched_terms},
                     )
                 )
                 if len(hits) >= limit:
