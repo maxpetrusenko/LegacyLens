@@ -7,6 +7,7 @@ ENV PYTHONUNBUFFERED=1
 
 COPY pyproject.toml README.md /app/
 COPY src /app/src
+COPY tests /app/tests
 
 RUN pip install --no-cache-dir .
 

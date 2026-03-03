@@ -24,6 +24,15 @@ WEB_DIR = Path(__file__).parent / "web"
 app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
 
+def _default_codebase_path(explicit: str | None) -> str:
+    if explicit:
+        return explicit
+    packaged_sample = Path("tests/testsuite.src")
+    if packaged_sample.exists():
+        return str(packaged_sample)
+    return "."
+
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1)
     codebase_path: str | None = None
@@ -32,6 +41,7 @@ class QueryRequest(BaseModel):
 class SourceRef(BaseModel):
     citation: str
     score: float
+    text: str
 
 
 class QueryResponse(BaseModel):
@@ -87,12 +97,16 @@ def meta() -> dict[str, str]:
 
 @app.post("/query", response_model=QueryResponse)
 def query_codebase(request: QueryRequest) -> QueryResponse:
-    settings = Settings(codebase_path=request.codebase_path or ".")
+    settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
     hits = retrieval.hits
     answer = generate_answer(request.query, hits, settings)
     sources = [
-        SourceRef(citation=format_citation(hit.file_path, hit.line_start, hit.line_end), score=hit.score)
+        SourceRef(
+            citation=format_citation(hit.file_path, hit.line_start, hit.line_end),
+            score=hit.score,
+            text=hit.text,
+        )
         for hit in hits
     ]
     return QueryResponse(answer=answer, sources=sources, diagnostics=asdict(retrieval.diagnostics))
@@ -100,7 +114,7 @@ def query_codebase(request: QueryRequest) -> QueryResponse:
 
 @app.get("/callers/{symbol}", response_model=CallersResponse)
 def callers(symbol: str, codebase_path: str | None = None) -> CallersResponse:
-    settings = Settings(codebase_path=codebase_path or ".")
+    settings = Settings(codebase_path=_default_codebase_path(codebase_path))
     graph_path = Path(settings.codebase_path) / settings.dependency_graph_file
     callers_list = find_callers(symbol, graph_path)
     if callers_list:
@@ -129,7 +143,7 @@ def callers(symbol: str, codebase_path: str | None = None) -> CallersResponse:
 @app.get("/graph/{symbol}", response_model=GraphResponse)
 def graph(symbol: str, codebase_path: str | None = None) -> GraphResponse:
     normalized = symbol.upper()
-    settings = Settings(codebase_path=codebase_path or ".")
+    settings = Settings(codebase_path=_default_codebase_path(codebase_path))
     graph_path = Path(settings.codebase_path) / settings.dependency_graph_file
     callers_index = load_callers_index(graph_path)
     index_edges = [(caller.upper(), callee.upper()) for callee, callers in callers_index.items() for caller in callers]
