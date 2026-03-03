@@ -58,5 +58,21 @@ class QdrantStore:
             )
         return hits
 
+    def iter_payloads(self, batch_size: int = 256) -> list[dict]:
+        payloads: list[dict] = []
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=batch_size,
+                with_payload=True,
+                with_vectors=False,
+                offset=offset,
+            )
+            payloads.extend(dict(point.payload or {}) for point in points)
+            if offset is None:
+                break
+        return payloads
+
 
 __all__ = ["QdrantStore"]
