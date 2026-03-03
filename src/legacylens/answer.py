@@ -54,11 +54,20 @@ def _openai_answer(settings: Settings, query: str, context: str) -> str:
     return payload["choices"][0]["message"]["content"].strip()
 
 
-def generate_answer(query: str, hits: list[RetrievalHit], settings: Settings) -> str:
+def generate_answer(
+    query: str,
+    hits: list[RetrievalHit],
+    settings: Settings,
+    *,
+    confidence_level: str | None = None,
+) -> str:
     context = _build_context(hits)
     if settings.llm_provider.lower() == "openai" and settings.openai_api_key:
         return _openai_answer(settings, query, context)
-    return _fallback_answer(query, hits)
+    answer = _fallback_answer(query, hits)
+    if confidence_level == "low" and hits:
+        return f"{answer}\n\nConfidence: low (verify against cited lines)."
+    return answer
 
 
 __all__ = ["generate_answer"]

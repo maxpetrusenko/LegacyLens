@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     answer_k: int = 5
     fallback_score_threshold: float = 0.65
     fallback_gap_threshold: float = 0.15
+    confidence_low_threshold: float = 0.15
+    confidence_medium_threshold: float = 0.35
     semantic_timeout_sec: float = 1.5
     context_expand_lines: int = 10
     query_cache_size: int = 256

@@ -56,6 +56,10 @@ class RetrievalDiagnostics:
     hybrid_triggered: bool
     semantic_hits: int
     fallback_hits: int
+    confidence_level: str = "low"
+    query_intent: str = "general"
+    query_entities: int = 0
+    rerank_applied: bool = False
     retrieval_error: str | None = None
 
 
