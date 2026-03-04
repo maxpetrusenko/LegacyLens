@@ -87,11 +87,26 @@ class OpenAIEmbeddingProvider:
 
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
     provider = settings.embed_provider.lower()
-    if provider in {"voyage", "auto"} and settings.voyage_api_key:
+    if provider == "voyage":
+        if not settings.voyage_api_key:
+            raise ValueError("VOYAGE_API_KEY is required when EMBED_PROVIDER=voyage.")
         return VoyageEmbeddingProvider(settings.voyage_api_key, settings.voyage_model)
-    if provider in {"openai", "auto"} and settings.openai_api_key:
+    if provider == "openai":
+        if not settings.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when EMBED_PROVIDER=openai.")
         return OpenAIEmbeddingProvider(settings.openai_api_key, settings.openai_embed_model)
-    return LocalHashEmbeddingProvider()
+
+    if provider == "auto":
+        if settings.voyage_api_key:
+            return VoyageEmbeddingProvider(settings.voyage_api_key, settings.voyage_model)
+        if settings.openai_api_key:
+            return OpenAIEmbeddingProvider(settings.openai_api_key, settings.openai_embed_model)
+        raise ValueError(
+            "No embedding provider configured. Set VOYAGE_API_KEY or OPENAI_API_KEY, "
+            "or explicitly set EMBED_PROVIDER to a configured provider."
+        )
+
+    raise ValueError(f"Unsupported EMBED_PROVIDER '{settings.embed_provider}'. Use: auto, voyage, openai.")
 
 
 __all__ = [

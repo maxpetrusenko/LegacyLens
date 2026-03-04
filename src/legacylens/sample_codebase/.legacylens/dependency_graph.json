@@ -1,0 +1,69 @@
+{
+  "callers_by_symbol": {
+    "CALL-FILE-HANDLER": [
+      "END-PERFORM",
+      "GOBACK"
+    ],
+    "DISPLAY-FILE-STATUS": [
+      "END-PERFORM"
+    ],
+    "DUMP": [
+      "END-CALL",
+      "INITIALIZE X-1",
+      "INITIALIZE X-10",
+      "INITIALIZE X-11",
+      "INITIALIZE X-12",
+      "INITIALIZE X-13",
+      "INITIALIZE X-14",
+      "INITIALIZE X-15",
+      "INITIALIZE X-16",
+      "INITIALIZE X-17",
+      "INITIALIZE X-18",
+      "INITIALIZE X-2",
+      "INITIALIZE X-3",
+      "INITIALIZE X-4",
+      "INITIALIZE X-5",
+      "INITIALIZE X-6",
+      "INITIALIZE X-7",
+      "INITIALIZE X-8",
+      "INITIALIZE X-9",
+      "INITIALIZE X-S1",
+      "INITIALIZE X-S10",
+      "INITIALIZE X-S11",
+      "INITIALIZE X-S12",
+      "INITIALIZE X-S13",
+      "INITIALIZE X-S14",
+      "INITIALIZE X-S15",
+      "INITIALIZE X-S16",
+      "INITIALIZE X-S17",
+      "INITIALIZE X-S18",
+      "INITIALIZE X-S2",
+      "INITIALIZE X-S3",
+      "INITIALIZE X-S4",
+      "INITIALIZE X-S5",
+      "INITIALIZE X-S6",
+      "INITIALIZE X-S7",
+      "INITIALIZE X-S8",
+      "INITIALIZE X-S9"
+    ],
+    "EXTFH": [
+      "GOBACK"
+    ],
+    "MOVE": [
+      "GOBACK"
+    ],
+    "READ-ALL-RECORDS": [
+      "END-PERFORM"
+    ],
+    "REWRITE-FIRST-RECORD": [
+      "END-PERFORM"
+    ],
+    "SET-KEYDEFINITIONS": [
+      "GOBACK"
+    ],
+    "UNTIL": [
+      "GOBACK"
+    ]
+  },
+  "generated_at": "2026-03-04T20:47:51.908847+00:00"
+}

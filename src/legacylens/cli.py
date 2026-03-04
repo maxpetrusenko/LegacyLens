@@ -23,7 +23,15 @@ def run_ingest(codebase_path: str) -> None:
 def run_query(query: str, codebase_path: str | None) -> None:
     settings = Settings(codebase_path=codebase_path or ".")
     retrieval = retrieve_with_diagnostics(query, settings, Path(settings.codebase_path))
+    if retrieval.diagnostics.retrieval_error:
+        raise RuntimeError(
+            "Retrieval failed: "
+            f"{retrieval.diagnostics.retrieval_error}. "
+            "Check embedding credentials, vector DB connectivity, and ingestion status."
+        )
     hits = retrieval.hits
+    if not hits:
+        raise RuntimeError("No relevant context found. Refine query or ingest additional code.")
     answer = generate_answer(query, hits, settings)
     print(answer)
     print("\nSources:")
@@ -82,23 +90,26 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "ingest":
-        run_ingest(args.codebase)
-        return
+    try:
+        if args.command == "ingest":
+            run_ingest(args.codebase)
+            return
 
-    if args.command == "query":
-        run_query(args.query, args.codebase)
-        return
+        if args.command == "query":
+            run_query(args.query, args.codebase)
+            return
 
-    if args.command == "callers":
-        run_callers(args.symbol, args.codebase)
-        return
+        if args.command == "callers":
+            run_callers(args.symbol, args.codebase)
+            return
 
-    if args.command == "eval":
-        run_eval(args.dataset, args.codebase, args.k, args.out)
-        return
+        if args.command == "eval":
+            run_eval(args.dataset, args.codebase, args.k, args.out)
+            return
 
-    parser.error(f"Unknown command: {args.command}")
+        parser.error(f"Unknown command: {args.command}")
+    except Exception as exc:
+        parser.exit(status=2, message=f"Error: {exc}\n")
 
 
 if __name__ == "__main__":

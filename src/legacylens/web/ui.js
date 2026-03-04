@@ -2,6 +2,8 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+let answerStreamGeneration = 0;
+
 export const el = {
   status: byId("status-badge"),
   answer: byId("answer-text"),
@@ -21,6 +23,7 @@ export function setStatus(label) {
 }
 
 export function setQueryLoading() {
+  answerStreamGeneration += 1;
   setStatus("Searching");
   el.queryError.textContent = "";
   el.answer.textContent = "";
@@ -32,7 +35,38 @@ export function clearQueryLoading() {
 }
 
 export function renderAnswer(text) {
+  answerStreamGeneration += 1;
   el.answer.textContent = text || "No answer generated.";
+}
+
+export async function streamAnswer(text) {
+  const message = text || "No answer generated.";
+  const generation = answerStreamGeneration + 1;
+  answerStreamGeneration = generation;
+  el.answer.textContent = "";
+
+  if (!message.length) {
+    return;
+  }
+
+  const chunkSize = Math.max(2, Math.ceil(message.length / 90));
+  await new Promise((resolve) => {
+    const pump = () => {
+      if (generation !== answerStreamGeneration) {
+        resolve();
+        return;
+      }
+      const shown = el.answer.textContent.length;
+      const next = Math.min(message.length, shown + chunkSize);
+      el.answer.textContent = message.slice(0, next);
+      if (next >= message.length) {
+        resolve();
+        return;
+      }
+      window.setTimeout(pump, 16);
+    };
+    pump();
+  });
 }
 
 export function renderSources(sources = []) {

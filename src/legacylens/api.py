@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -112,13 +112,41 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
     effective_debug = bool(debug or request.debug)
 
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
+    if retrieval.diagnostics.retrieval_error:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Retrieval failed",
+                "cause": retrieval.diagnostics.retrieval_error,
+                "action": "Check embedding provider credentials, vector store connectivity, and ingestion status.",
+            },
+        )
+
     hits = retrieval.hits
-    answer = generate_answer(
-        request.query,
-        hits,
-        settings,
-        confidence_level=retrieval.diagnostics.confidence_level,
-    )
+    if not hits:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "No relevant context found",
+                "action": "Refine query terms, ingest more code, or verify vector index coverage.",
+            },
+        )
+    try:
+        answer = generate_answer(
+            request.query,
+            hits,
+            settings,
+            confidence_level=retrieval.diagnostics.confidence_level,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Answer generation failed",
+                "cause": str(exc),
+                "action": "Verify LLM provider configuration and API credentials.",
+            },
+        ) from exc
     sources = [
         SourceRef(
             citation=format_citation(hit.file_path, hit.line_start, hit.line_end),

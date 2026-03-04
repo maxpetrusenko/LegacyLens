@@ -56,27 +56,14 @@ def test_query_returns_empty_sources_when_semantic_retrieval_times_out(monkeypat
     monkeypatch.setattr("legacylens.api.retrieve_with_diagnostics", fake_retrieve_with_diagnostics)
 
     response = client.post("/query", json={"query": "where is file i/o handled?"})
-    assert response.status_code == 200
+    assert response.status_code == 503
     payload = response.json()
-
     assert payload == {
-        "answer": "No confident match found. Try a narrower query with symbol or file hints.",
-        "sources": [],
-        "diagnostics": {
-            "latency_ms": 1502,
-            "top1_score": 0.0,
-            "chunks_returned": 0,
-            "hybrid_triggered": False,
-            "semantic_hits": 0,
-            "fallback_hits": 0,
-            "confidence_level": "low",
-            "query_intent": "semantic",
-            "query_entities": 0,
-            "rerank_applied": False,
-            "retrieval_error": "semantic retrieval timed out",
-        },
-        "confidence_label": "low",
-        "debug_hits": None,
+        "detail": {
+            "error": "Retrieval failed",
+            "cause": "semantic retrieval timed out",
+            "action": "Check embedding provider credentials, vector store connectivity, and ingestion status.",
+        }
     }
 
 

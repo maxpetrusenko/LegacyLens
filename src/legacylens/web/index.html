@@ -18,7 +18,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
     />
-    <link rel="stylesheet" href="/assets/styles.css?v=20260303b" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260303c" />
   </head>
   <body>
     <div class="ambient" aria-hidden="true"></div>
@@ -123,11 +123,15 @@
       <section class="charts-grid">
         <article class="panel chart-card">
           <h3>Hit Distribution</h3>
-          <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+          <div class="chart-frame">
+            <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+          </div>
         </article>
         <article class="panel chart-card">
           <h3>Score Bands</h3>
-          <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+          <div class="chart-frame">
+            <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+          </div>
         </article>
       </section>
     </main>
@@ -135,6 +139,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cobol.min.js"></script>
-    <script type="module" src="/assets/app.js?v=20260303a"></script>
+    <script type="module" src="/assets/app.js?v=20260303c"></script>
   </body>
 </html>

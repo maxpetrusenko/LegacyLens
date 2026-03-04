@@ -11,6 +11,7 @@ import {
   setGraphEmpty,
   setQueryLoading,
   setStatus,
+  streamAnswer,
 } from "./ui.js";
 
 const queryForm = document.getElementById("query-form");
@@ -20,6 +21,7 @@ const symbolInput = document.getElementById("symbol-input");
 const chips = document.querySelectorAll(".chip");
 let chartLibReady = false;
 let graphLibReady = false;
+let activeQueryRun = 0;
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -67,16 +69,29 @@ async function runQuery(query) {
   if (!query) {
     return;
   }
+  const runId = activeQueryRun + 1;
+  activeQueryRun = runId;
   setQueryLoading();
   try {
     const payload = await queryCodebase(query);
     await ensureChartLib();
-    renderAnswer(payload.answer);
+    if (runId !== activeQueryRun) {
+      return;
+    }
+    clearQueryLoading();
     renderSources(payload.sources || []);
     renderDiagnostics(payload.diagnostics || {});
     updateCharts(payload.diagnostics || {});
+    setStatus("Responding");
+    await streamAnswer(payload.answer);
+    if (runId !== activeQueryRun) {
+      return;
+    }
     setStatus("Ready");
   } catch (error) {
+    if (runId !== activeQueryRun) {
+      return;
+    }
     renderAnswer("Query failed.");
     renderSources([]);
     renderDiagnostics({});
@@ -84,7 +99,9 @@ async function runQuery(query) {
     renderQueryError(error);
     setStatus("Error");
   } finally {
-    clearQueryLoading();
+    if (runId === activeQueryRun) {
+      clearQueryLoading();
+    }
   }
 }
 

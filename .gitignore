@@ -1,6 +1,10 @@
+.agents/
 .claude/
 .codex/
-.agents/
+.cursor/
+AGENTS.md
+CLAUDE.md
+CODEX.md
 .venv/
 __pycache__/
 .pytest_cache/

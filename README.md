@@ -2,8 +2,7 @@
 
 RAG pipeline for legacy COBOL codebases with:
 - COBOL-aware chunking (PROCEDURE DIVISION paragraph boundaries + fallback windows)
-- Embeddings (Voyage Code 2 or OpenAI fallback)
-- Embeddings (Voyage Code 2, OpenAI, or built-in local hash fallback)
+- Embeddings (Voyage Code 2 or OpenAI)
 - Qdrant vector search
 - Hybrid fallback search via `rg`
 - Query embedding cache (in-process LRU)
@@ -30,15 +29,19 @@ export VOYAGE_API_KEY=...
 export OPENAI_API_KEY=...
 ```
 
-If no key is configured, LegacyLens uses a local hash-based embedding model so ingestion/query still runs for MVP demos.
-
 Optional:
 
 ```bash
 export QDRANT_URL=http://localhost:6333
-export QDRANT_COLLECTION=legacylens_chunks
+export QDRANT_COLLECTION=legacylens_chunks_dev
 export CODEBASE_PATH=/absolute/path/to/cobol/repo
 ```
+
+If `QDRANT_URL` points to an unreachable host, `/query` will fail with `503` and a retrieval error cause.
+
+Use different collections per environment when sharing one Qdrant instance:
+- `legacylens_chunks_dev` for local/dev
+- `legacylens_chunks_prod` for production
 
 ## Run Qdrant
 

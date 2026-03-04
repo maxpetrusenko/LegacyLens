@@ -61,11 +61,16 @@ def generate_answer(
     *,
     confidence_level: str | None = None,
 ) -> str:
+    if not hits:
+        raise ValueError("No retrieval hits returned. Fix retrieval/config issues and retry the query.")
+
     context = _build_context(hits)
-    if settings.llm_provider.lower() == "openai" and settings.openai_api_key:
-        return _openai_answer(settings, query, context)
-    answer = _fallback_answer(query, hits)
-    if confidence_level == "low" and hits:
+    if settings.llm_provider.lower() != "openai":
+        raise ValueError("Unsupported LLM provider. Set LLM_PROVIDER=openai.")
+    if not settings.openai_api_key:
+        raise ValueError("OPENAI_API_KEY is required for answer generation.")
+    answer = _openai_answer(settings, query, context)
+    if confidence_level == "low":
         return f"{answer}\n\nConfidence: low (verify against cited lines)."
     return answer
 
