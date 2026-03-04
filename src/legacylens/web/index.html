@@ -18,7 +18,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
     />
-    <link rel="stylesheet" href="/assets/styles.css?v=20260303b" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260304a" />
   </head>
   <body>
     <div class="ambient" aria-hidden="true"></div>
@@ -48,25 +48,34 @@
         </div>
       </header>
 
-      <section class="panel intro-panel">
-        <h2>What LegacyLens Does</h2>
-        <p>
-          LegacyLens helps you understand large COBOL systems faster by combining semantic retrieval, exact file
-          citations, and dependency graph inspection.
-        </p>
-        <div class="intro-grid">
-          <article>
-            <h3>1. Ask</h3>
-            <p>Type a question in plain English (or COBOL symbol names).</p>
-          </article>
-          <article>
-            <h3>2. Verify</h3>
-            <p>Review answer text with matched source citations and confidence stats.</p>
-          </article>
-          <article>
-            <h3>3. Trace</h3>
-            <p>Map callers/callees for a symbol to understand runtime impact quickly.</p>
-          </article>
+      <!-- Query KPI Row: top-level metrics strip -->
+      <section id="query-kpis" class="kpi-row">
+        <article class="kpi-card panel">
+          <p>Latency</p>
+          <strong id="stat-latency">-</strong>
+        </article>
+        <article class="kpi-card panel">
+          <p>Top Score</p>
+          <strong id="stat-top1">-</strong>
+        </article>
+        <article class="kpi-card panel">
+          <p>Hybrid Trigger</p>
+          <strong id="stat-hybrid">-</strong>
+        </article>
+        <article class="kpi-card panel">
+          <p>Hit Mix</p>
+          <strong id="stat-hits">-</strong>
+        </article>
+      </section>
+
+      <!-- Dataset Strip: horizontal dataset selector -->
+      <section id="dataset-strip" class="dataset-strip panel">
+        <div class="strip-head">
+          <h2>Dataset</h2>
+          <span id="dataset-label" class="strip-label">None loaded</span>
+        </div>
+        <div id="dataset-list" class="dataset-list" role="list" aria-label="Available datasets">
+          <span class="strip-empty">No datasets indexed yet.</span>
         </div>
       </section>
 
@@ -101,40 +110,72 @@
         <p id="graph-empty" class="state empty">Lookup a symbol to render graph topology.</p>
       </section>
 
-      <section class="analytics-grid">
-        <article class="panel stat-card">
-          <p>Latency</p>
-          <strong id="stat-latency">-</strong>
-        </article>
-        <article class="panel stat-card">
-          <p>Top Score</p>
-          <strong id="stat-top1">-</strong>
-        </article>
-        <article class="panel stat-card">
-          <p>Hybrid Trigger</p>
-          <strong id="stat-hybrid">-</strong>
-        </article>
-        <article class="panel stat-card">
-          <p>Hit Mix</p>
-          <strong id="stat-hits">-</strong>
-        </article>
+      <!-- Analytics Panel: wrapper for all analytics charts -->
+      <section id="analytics-panel" class="analytics-panel">
+        <div class="panel-head">
+          <h2>Query Analytics</h2>
+        </div>
+        <div class="analytics-grid">
+          <article class="panel chart-card">
+            <h3>Similarity Distribution</h3>
+            <div id="similarity-chart" class="chart-mount" aria-label="Similarity distribution chart"></div>
+          </article>
+          <article class="panel chart-card">
+            <h3>Division Breakdown</h3>
+            <div id="division-chart" class="chart-mount" aria-label="Division breakdown chart"></div>
+          </article>
+          <article class="panel chart-card">
+            <h3>Chunk Type Mix</h3>
+            <div id="chunk-type-chart" class="chart-mount" aria-label="Chunk type mix chart"></div>
+          </article>
+          <article class="panel chart-card">
+            <h3>Hit Distribution</h3>
+            <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+          </article>
+          <article class="panel chart-card">
+            <h3>Score Bands</h3>
+            <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+          </article>
+        </div>
       </section>
 
-      <section class="charts-grid">
-        <article class="panel chart-card">
-          <h3>Hit Distribution</h3>
-          <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
-        </article>
-        <article class="panel chart-card">
-          <h3>Score Bands</h3>
-          <canvas id="score-chart" aria-label="Score bands chart"></canvas>
-        </article>
+      <!-- Query Log List: history of executed queries -->
+      <section id="query-log-list" class="query-log panel">
+        <div class="panel-head">
+          <h2>Query Log</h2>
+          <button id="clear-log-btn" type="button" class="chip">Clear</button>
+        </div>
+        <ul id="log-entries" class="log-entries" role="list" aria-label="Query history">
+          <li class="log-empty">No queries yet.</li>
+        </ul>
+      </section>
+
+      <section class="panel intro-panel">
+        <h2>What LegacyLens Does</h2>
+        <p>
+          LegacyLens helps you understand large COBOL systems faster by combining semantic retrieval, exact file
+          citations, and dependency graph inspection.
+        </p>
+        <div class="intro-grid">
+          <article>
+            <h3>1. Ask</h3>
+            <p>Type a question in plain English (or COBOL symbol names).</p>
+          </article>
+          <article>
+            <h3>2. Verify</h3>
+            <p>Review answer text with matched source citations and confidence stats.</p>
+          </article>
+          <article>
+            <h3>3. Trace</h3>
+            <p>Map callers/callees for a symbol to understand runtime impact quickly.</p>
+          </article>
+        </div>
       </section>
     </main>
 
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cobol.min.js"></script>
-    <script type="module" src="/assets/app.js?v=20260303a"></script>
+    <script type="module" src="/assets/app.js?v=20260304a"></script>
   </body>
 </html>
