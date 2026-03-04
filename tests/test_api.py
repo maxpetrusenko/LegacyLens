@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from legacylens.api import app
+from legacylens.config import Settings
 from legacylens.dependency_graph import save_callers_index
 from legacylens.models import RetrievalDiagnostics, RetrievalHit, RetrievalResult
 
@@ -11,13 +12,15 @@ client = TestClient(app)
 
 
 def _default_query_meta() -> dict:
-    """Default query_meta expected in responses."""
-    # When embed_provider is "auto", it falls back to openai_embed_model
+    settings = Settings()
+    use_voyage_model = settings.embed_provider == "voyage" or (
+        settings.embed_provider == "auto" and bool(settings.voyage_api_key)
+    )
     return {
-        "llm_model": "gpt-4.1-mini",
-        "embed_provider": "auto",
-        "embed_model": "text-embedding-3-small",
-        "qdrant_collection": "legacylens_chunks",
+        "llm_model": settings.llm_model,
+        "embed_provider": settings.embed_provider,
+        "embed_model": settings.voyage_model if use_voyage_model else settings.openai_embed_model,
+        "qdrant_collection": settings.qdrant_collection,
     }
 
 
