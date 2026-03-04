@@ -14,6 +14,8 @@ export const el = {
   statTop1: byId("stat-top1"),
   statHybrid: byId("stat-hybrid"),
   statHits: byId("stat-hits"),
+  graphStats: byId("graph-stats"),
+  graphLegend: byId("graph-legend"),
 };
 
 const _expandState = new Map();
@@ -258,5 +260,36 @@ export function updateSessionStats(stats) {
     <span class="session-stat">${stats.queryCount ?? 0} queries</span>
     <span class="session-stat">Avg similarity: ${Number(stats.avgSimilarity ?? 0).toFixed(3)}</span>
     <span class="session-stat">${stats.filesSeen ?? 0} files seen</span>
+  `;
+}
+
+export function renderGraphStats(stats = {}) {
+  if (!el.graphStats) {
+    return;
+  }
+  const { nodeCount = 0, edgeCount = 0 } = stats;
+  el.graphStats.innerHTML = `
+    <span class="graph-stat">${nodeCount} nodes</span>
+    <span class="graph-stat">${edgeCount} edges</span>
+  `;
+}
+
+export function renderGraphLegend() {
+  if (!el.graphLegend) {
+    return;
+  }
+  el.graphLegend.innerHTML = `
+    <div class="legend-item">
+      <span class="legend-dot legend-perform"></span>
+      <span>PERFORM</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot legend-call"></span>
+      <span>CALL</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot legend-unknown"></span>
+      <span>Unknown</span>
+    </div>
   `;
 }

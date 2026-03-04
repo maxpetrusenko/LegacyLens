@@ -180,6 +180,53 @@ button:hover {
   font: 400 0.78rem/1 var(--mono);
 }
 
+.graph-stats {
+  display: flex;
+  gap: 12px;
+  font: 500 0.8rem/1 var(--mono);
+  color: var(--muted);
+}
+
+.graph-stat {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef5ff;
+  border: 1px solid #c3d7ee;
+}
+
+.graph-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font: 400 0.78rem/1 var(--sans);
+  color: var(--muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.legend-perform {
+  background: #44f2c8;
+}
+
+.legend-call {
+  background: #3fd2ff;
+}
+
+.legend-unknown {
+  background: #4f77b0;
+}
+
 kbd {
   border: 1px solid var(--line);
   border-radius: 6px;

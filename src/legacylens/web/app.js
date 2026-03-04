@@ -1,12 +1,14 @@
 import { getCallers, getGraph, queryCodebase } from "./api-client.js";
 import { initCharts, updateCharts } from "./charts.js";
-import { renderGraph } from "./graph.js";
+import { renderGraph, getGraphStats } from "./graph.js";
 import {
   addToQueryLog,
   clearQueryLoading,
   renderAnswer,
   renderCallers,
   renderDiagnostics,
+  renderGraphLegend,
+  renderGraphStats,
   renderKpiChips,
   renderQueryLog,
   renderQueryError,
@@ -108,14 +110,14 @@ async function runQuery(query) {
     renderAnswer(payload.answer);
     renderSources(payload.sources || []);
     renderDiagnostics(payload.diagnostics || {});
-    updateCharts(payload.diagnostics || {});
+    updateCharts(payload.diagnostics || {}, payload.sources || []);
     _recordQuery(payload.diagnostics || {}, payload.sources || []);
     setStatus("Ready");
   } catch (error) {
     renderAnswer("Query failed.");
     renderSources([]);
     renderDiagnostics({});
-    updateCharts({});
+    updateCharts({}, []);
     renderQueryError(error);
     setStatus("Error");
   } finally {
@@ -134,6 +136,11 @@ async function runGraphLookup(symbol) {
     renderCallers(callersData.callers || []);
     renderGraph(graphData);
     setGraphEmpty(!(graphData.edges || []).length);
+
+    const stats = getGraphStats();
+    renderGraphStats(stats);
+    renderGraphLegend();
+
     setStatus("Ready");
   } catch (error) {
     renderCallers([`Lookup failed: ${String(error)}`]);
@@ -176,3 +183,4 @@ document.addEventListener("keydown", async (event) => {
 setStatus("Ready");
 setGraphEmpty(true);
 renderQueryLog();
+renderGraphLegend();
