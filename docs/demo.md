@@ -29,14 +29,20 @@
   where the answer came from. We also support hybrid fallback
   search to keep recall strong when vector similarity is weak.
 
-    “At this point, I open the LegacyLens web console and run a
+    "At this point, I open the LegacyLens web console and run a
   live query. In the Answer panel, you see the synthesized
   response in plain language. In Matched Sources, you see
   exactly which snippets were used, with file and line citations
-  for verification. In Hit Distribution, you see how retrieval
-  is spread across returned results, so we can quickly judge
-  whether the system found strong concentrated matches or weaker
-  scattered hits.”
+  for verification. Each source card has a similarity score bar
+  and an Expand button to reveal the full COBOL snippet. The KPI
+  strip at the top shows latency, top score, hybrid fallback
+  status, and semantic/fallback hit mix. On the right, the
+  Dependency Graph renders caller/callee topology with a legend
+  for PERFORM versus CALL edges and node/edge counters. Below,
+  the Analytics Panel shows five charts: similarity distribution,
+  division breakdown, chunk type mix, hit distribution, and
+  score bands. The Query Log at the bottom tracks session history
+  with timestamps."
 
  Third, interface and deployment. For the MVP I exposed a FastAPI endpoint so engineers can integrate
   through HTTP. The system is deployed and publicly accessible, which satisfies the MVP deployment

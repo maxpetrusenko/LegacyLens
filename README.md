@@ -87,6 +87,21 @@ or with exact citations:
 {"query":"where is STOP RUN used?","relevant_citations":["[tests/testsuite.src/numeric-dump.cob:455-455]"]}
 ```
 
+## Web Console UI
+
+The LegacyLens console provides visual parity with the CLI for interactive demos and live exploration:
+
+- Dataset strip: Horizontal selector for indexed codebases with current dataset label
+- KPI chips: Top-level metrics (Retrieved, Latency, Top Score, Files) updated per-query
+- Source cards: Expandable code snippets with score bars, citation tags, Copy button
+- Dependency graph: Cytoscape-powered caller/callee visualization with legend (PERFORM/CALL/Unknown) and node/edge counters
+- Analytics panel: Five charts (Similarity Distribution, Division Breakdown, Chunk Type Mix, Hit Distribution, Score Bands)
+- Query log: Session history with timestamps (max 50 entries, newest first)
+
+Keyboard shortcuts:
+- `/` focus query input
+- `Enter` run query
+
 ## Tests
 
 ```bash
