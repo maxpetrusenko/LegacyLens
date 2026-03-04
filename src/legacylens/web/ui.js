@@ -2,8 +2,6 @@ function byId(id) {
   return document.getElementById(id);
 }
 
-let answerStreamGeneration = 0;
-
 export const el = {
   status: byId("status-badge"),
   answer: byId("answer-text"),
@@ -16,14 +14,41 @@ export const el = {
   statTop1: byId("stat-top1"),
   statHybrid: byId("stat-hybrid"),
   statHits: byId("stat-hits"),
+  graphStats: byId("graph-stats"),
+  graphLegend: byId("graph-legend"),
 };
+
+const _expandState = new Map();
+const _queryLog = [];
+
+export function getExpandState(key) {
+  return _expandState.get(key) ?? false;
+}
+
+export function setExpandState(key, expanded) {
+  _expandState.set(key, expanded);
+}
+
+export function toggleExpand(key) {
+  const current = getExpandState(key);
+  setExpandState(key, !current);
+  return !current;
+}
+
+export function getQueryLog() {
+  return [..._queryLog];
+}
+
+export function addToQueryLog(entry) {
+  _queryLog.unshift(entry);
+  if (_queryLog.length > 50) _queryLog.pop();
+}
 
 export function setStatus(label) {
   el.status.textContent = label;
 }
 
 export function setQueryLoading() {
-  answerStreamGeneration += 1;
   setStatus("Searching");
   el.queryError.textContent = "";
   el.answer.textContent = "";
@@ -35,37 +60,100 @@ export function clearQueryLoading() {
 }
 
 export function renderAnswer(text) {
-  answerStreamGeneration += 1;
   el.answer.textContent = text || "No answer generated.";
 }
 
-export async function streamAnswer(text) {
-  const message = text || "No answer generated.";
-  const generation = answerStreamGeneration + 1;
-  answerStreamGeneration = generation;
-  el.answer.textContent = "";
-
-  if (!message.length) {
-    return;
+function _sourceKey(source) {
+  if (source.file_path && source.line_start && source.line_end) {
+    return `${source.file_path}:${source.line_start}-${source.line_end}`;
   }
+  if (source.citation) {
+    return source.citation;
+  }
+  return `${source.text || ""}`.slice(0, 120);
+}
 
-  const chunkSize = Math.max(2, Math.ceil(message.length / 90));
-  await new Promise((resolve) => {
-    const pump = () => {
-      if (generation !== answerStreamGeneration) {
-        resolve();
-        return;
-      }
-      const shown = el.answer.textContent.length;
-      const next = Math.min(message.length, shown + chunkSize);
-      el.answer.textContent = message.slice(0, next);
-      if (next >= message.length) {
-        resolve();
-        return;
-      }
-      window.setTimeout(pump, 16);
-    };
-    pump();
+function _renderScoreBar(score) {
+  const pct = Math.round(Number(score || 0) * 100);
+  return `
+    <div class="score-bar-wrap">
+      <div class="score-bar-fill" style="width: ${pct}%"></div>
+      <span class="score-label">${pct}%</span>
+    </div>
+  `;
+}
+
+function _renderTags(source) {
+  const tags = [];
+  if (source.division) tags.push(source.division);
+  if (source.section) tags.push(source.section);
+  if (source.symbol_name) tags.push(source.symbol_name);
+  if (Array.isArray(source.tags)) tags.push(...source.tags.slice(0, 2));
+  if (!tags.length) {
+    return "";
+  }
+  return tags.map((t) => `<span class="source-tag">${_escapeHtml(String(t))}</span>`).join(" ");
+}
+
+function _renderSourceHeader(source, key, isExpanded) {
+  const citation = source.citation || `${source.file_path || "unknown"}:${source.line_start || 1}-${source.line_end || 1}`;
+  const tagsMarkup = _renderTags(source);
+  return `
+    <div class="source-header">
+      <div class="source-meta">
+        <span class="source-path">${_escapeHtml(citation)}</span>
+        ${tagsMarkup ? `<div class="source-tags">${tagsMarkup}</div>` : ""}
+      </div>
+      <div class="source-actions">
+        ${_renderScoreBar(source.score)}
+        <button class="source-action-btn expand-btn" data-key="${key}">
+          ${isExpanded ? "Collapse" : "Expand"}
+        </button>
+        <button class="source-action-btn copy-btn" data-key="${key}">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function _renderSourceBody(source, key) {
+  return `
+    <div class="source-body" data-key="${key}">
+      <pre class="source-code"><code class="language-cobol">${_escapeHtml(source.text || "")}</code></pre>
+    </div>
+  `;
+}
+
+function _escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function _applyPrism(element) {
+  if (window.Prism) {
+    Prism.highlightAllUnder(element);
+  }
+}
+
+function _attachSourceListeners(li) {
+  const expandBtn = li.querySelector(".expand-btn");
+  const copyBtn = li.querySelector(".copy-btn");
+  const body = li.querySelector(".source-body");
+
+  expandBtn.addEventListener("click", () => {
+    const key = expandBtn.dataset.key;
+    const isExpanded = toggleExpand(key);
+    body.classList.toggle("is-collapsed", !isExpanded);
+    expandBtn.textContent = isExpanded ? "Collapse" : "Expand";
+  });
+
+  copyBtn.addEventListener("click", async () => {
+    const code = li.querySelector("code")?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(code);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => (copyBtn.textContent = "Copy"), 1500);
+    } catch {}
   });
 }
 
@@ -76,12 +164,28 @@ export function renderSources(sources = []) {
     return;
   }
   el.sourcesEmpty.style.display = "none";
-  for (const source of sources) {
+
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+    const key = _sourceKey(source);
+    const isExpanded = i === 0 || getExpandState(key);
+    if (i === 0) setExpandState(key, true);
+
     const li = document.createElement("li");
-    const score = Number(source.score || 0).toFixed(4);
-    li.textContent = `${source.citation} | score: ${score}`;
+    li.className = "source-item";
+    li.innerHTML = `
+      ${_renderSourceHeader(source, key, isExpanded)}
+      ${_renderSourceBody(source, key)}
+    `;
     el.sourcesList.appendChild(li);
+
+    const body = li.querySelector(".source-body");
+    body.classList.toggle("is-collapsed", !isExpanded);
+
+    _attachSourceListeners(li);
   }
+
+  _applyPrism(el.sourcesList);
 }
 
 export function renderDiagnostics(d = {}) {
@@ -112,4 +216,80 @@ export function renderCallers(callers = []) {
 
 export function setGraphEmpty(isEmpty) {
   el.graphEmpty.style.display = isEmpty ? "block" : "none";
+}
+
+export function renderQueryLog(containerId = "log-entries") {
+  const container = byId(containerId) || byId("query-log-list");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!_queryLog.length) {
+    container.innerHTML = '<li class="query-log-empty">No queries yet.</li>';
+    return;
+  }
+  for (const entry of _queryLog) {
+    const li = document.createElement("li");
+    li.className = "query-log-item";
+    li.innerHTML = `
+      <span class="query-log-q">${_escapeHtml(entry.query)}</span>
+      <span class="query-log-time">${new Date(entry.ts).toLocaleTimeString()}</span>
+    `;
+    container.appendChild(li);
+  }
+}
+
+export function renderKpiChips(diagnostics = {}, sources = [], containerId = "kpi-chips") {
+  const container = byId(containerId);
+  if (!container) return;
+
+  const chips = [
+    { label: "Retrieved", value: String(diagnostics.chunks_returned ?? sources.length) },
+    { label: "Latency", value: `${Number(diagnostics.latency_ms || 0)}ms` },
+    { label: "Top Score", value: Number(diagnostics.top1_score || 0).toFixed(3) },
+    { label: "Files", value: String(new Set(sources.map(s => s.file_path)).size) },
+  ];
+
+  container.innerHTML = chips
+    .map(c => `<span class="kpi-chip"><span class="kpi-label">${c.label}</span> ${c.value}</span>`)
+    .join("");
+}
+
+export function updateSessionStats(stats) {
+  const container = byId("session-stats");
+  if (!container) return;
+  container.innerHTML = `
+    <span class="session-stat">${stats.queryCount ?? 0} queries</span>
+    <span class="session-stat">Avg similarity: ${Number(stats.avgSimilarity ?? 0).toFixed(3)}</span>
+    <span class="session-stat">${stats.filesSeen ?? 0} files seen</span>
+  `;
+}
+
+export function renderGraphStats(stats = {}) {
+  if (!el.graphStats) {
+    return;
+  }
+  const { nodeCount = 0, edgeCount = 0 } = stats;
+  el.graphStats.innerHTML = `
+    <span class="graph-stat">${nodeCount} nodes</span>
+    <span class="graph-stat">${edgeCount} edges</span>
+  `;
+}
+
+export function renderGraphLegend() {
+  if (!el.graphLegend) {
+    return;
+  }
+  el.graphLegend.innerHTML = `
+    <div class="legend-item">
+      <span class="legend-dot legend-perform"></span>
+      <span>PERFORM</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot legend-call"></span>
+      <span>CALL</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot legend-unknown"></span>
+      <span>Unknown</span>
+    </div>
+  `;
 }

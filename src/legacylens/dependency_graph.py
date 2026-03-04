@@ -4,11 +4,15 @@ import json
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from legacylens.models import CodeChunk
 
+Relation = Literal["perform", "call", "unknown"]
+
 
 def normalize_called_symbol(raw_symbol: str) -> str | None:
+    """Normalize symbol to uppercase name, returns None if invalid."""
     normalized: str | None = None
     if raw_symbol.startswith("PERFORM "):
         normalized = raw_symbol.removeprefix("PERFORM ").strip().upper()
@@ -19,6 +23,15 @@ def normalize_called_symbol(raw_symbol: str) -> str | None:
     if not any(char.isalpha() for char in normalized):
         return None
     return normalized
+
+
+def extract_relation(raw_symbol: str) -> Relation:
+    """Extract relation type from raw symbol string."""
+    if raw_symbol.startswith("PERFORM "):
+        return "perform"
+    if raw_symbol.startswith("CALL '") and raw_symbol.endswith("'"):
+        return "call"
+    return "unknown"
 
 
 def build_callers_index(chunks: list[CodeChunk]) -> dict[str, list[str]]:
@@ -57,7 +70,13 @@ def find_callers(symbol_name: str, graph_path: Path) -> list[str]:
 
 
 def build_edges_from_payloads(payloads: list[dict]) -> list[tuple[str, str]]:
-    edges: set[tuple[str, str]] = set()
+    """Build edge list from payloads (legacy interface, returns typed edge tuples)."""
+    return [e[:2] for e in build_typed_edges_from_payloads(payloads)]
+
+
+def build_typed_edges_from_payloads(payloads: list[dict]) -> list[tuple[str, str, Relation]]:
+    """Build typed edge list from payloads. Returns (source, target, relation) tuples."""
+    edges: set[tuple[str, str, Relation]] = set()
     for payload in payloads:
         raw_caller = payload.get("symbol_name")
         if not isinstance(raw_caller, str) or not raw_caller:
@@ -70,7 +89,8 @@ def build_edges_from_payloads(payloads: list[dict]) -> list[tuple[str, str]]:
             callee = normalize_called_symbol(str(raw_symbol))
             if not callee:
                 continue
-            edges.add((caller, callee))
+            relation = extract_relation(str(raw_symbol))
+            edges.add((caller, callee, relation))
     return sorted(edges)
 
 
@@ -97,9 +117,12 @@ def find_symbol_neighborhood(
 __all__ = [
     "build_callers_index",
     "build_edges_from_payloads",
+    "build_typed_edges_from_payloads",
     "save_callers_index",
     "load_callers_index",
     "find_callers",
     "find_symbol_neighborhood",
     "normalize_called_symbol",
+    "extract_relation",
+    "Relation",
 ]

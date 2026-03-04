@@ -1,17 +1,22 @@
 import { getCallers, getGraph, queryCodebase } from "./api-client.js";
 import { initCharts, updateCharts } from "./charts.js";
-import { renderGraph } from "./graph.js";
+import { renderGraph, getGraphStats } from "./graph.js";
 import {
+  addToQueryLog,
   clearQueryLoading,
   renderAnswer,
   renderCallers,
   renderDiagnostics,
+  renderGraphLegend,
+  renderGraphStats,
+  renderKpiChips,
+  renderQueryLog,
   renderQueryError,
   renderSources,
   setGraphEmpty,
   setQueryLoading,
   setStatus,
-  streamAnswer,
+  updateSessionStats,
 } from "./ui.js";
 
 const queryForm = document.getElementById("query-form");
@@ -19,9 +24,38 @@ const queryInput = document.getElementById("query-input");
 const graphForm = document.getElementById("graph-form");
 const symbolInput = document.getElementById("symbol-input");
 const chips = document.querySelectorAll(".chip");
+
 let chartLibReady = false;
 let graphLibReady = false;
-let activeQueryRun = 0;
+
+const session = {
+  queryCount: 0,
+  similaritySum: 0,
+  filesSeen: new Set(),
+};
+
+function _updateSessionStats() {
+  const avgSimilarity = session.queryCount
+    ? session.similaritySum / session.queryCount
+    : 0;
+  updateSessionStats({
+    queryCount: session.queryCount,
+    avgSimilarity,
+    filesSeen: session.filesSeen.size,
+  });
+}
+
+function _recordQuery(diagnostics, sources) {
+  session.queryCount += 1;
+  session.similaritySum += Number(diagnostics.top1_score || 0);
+  for (const s of sources || []) {
+    session.filesSeen.add(s.file_path);
+  }
+  _updateSessionStats();
+  addToQueryLog({ query: queryInput.value, ts: Date.now() });
+  renderKpiChips(diagnostics, sources);
+  renderQueryLog();
+}
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -69,39 +103,25 @@ async function runQuery(query) {
   if (!query) {
     return;
   }
-  const runId = activeQueryRun + 1;
-  activeQueryRun = runId;
   setQueryLoading();
   try {
     const payload = await queryCodebase(query);
     await ensureChartLib();
-    if (runId !== activeQueryRun) {
-      return;
-    }
-    clearQueryLoading();
+    renderAnswer(payload.answer);
     renderSources(payload.sources || []);
     renderDiagnostics(payload.diagnostics || {});
-    updateCharts(payload.diagnostics || {});
-    setStatus("Responding");
-    await streamAnswer(payload.answer);
-    if (runId !== activeQueryRun) {
-      return;
-    }
+    updateCharts(payload.diagnostics || {}, payload.sources || []);
+    _recordQuery(payload.diagnostics || {}, payload.sources || []);
     setStatus("Ready");
   } catch (error) {
-    if (runId !== activeQueryRun) {
-      return;
-    }
     renderAnswer("Query failed.");
     renderSources([]);
     renderDiagnostics({});
-    updateCharts({});
+    updateCharts({}, []);
     renderQueryError(error);
     setStatus("Error");
   } finally {
-    if (runId === activeQueryRun) {
-      clearQueryLoading();
-    }
+    clearQueryLoading();
   }
 }
 
@@ -116,6 +136,11 @@ async function runGraphLookup(symbol) {
     renderCallers(callersData.callers || []);
     renderGraph(graphData);
     setGraphEmpty(!(graphData.edges || []).length);
+
+    const stats = getGraphStats();
+    renderGraphStats(stats);
+    renderGraphLegend();
+
     setStatus("Ready");
   } catch (error) {
     renderCallers([`Lookup failed: ${String(error)}`]);
@@ -157,3 +182,5 @@ document.addEventListener("keydown", async (event) => {
 
 setStatus("Ready");
 setGraphEmpty(true);
+renderQueryLog();
+renderGraphLegend();
