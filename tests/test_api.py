@@ -87,6 +87,75 @@ def test_query_returns_empty_sources_when_semantic_retrieval_times_out(monkeypat
     }
 
 
+def test_query_rejects_vague_chitchat() -> None:
+    response = client.post("/query", json={"query": "hello there"})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error"] == "Query too vague"
+    assert detail["reason"] == "chitchat"
+    assert len(detail["suggestions"]) >= 3
+
+
+def test_query_blocks_when_no_dataset_indexed(monkeypatch) -> None:
+    monkeypatch.setattr("legacylens.api._has_indexed_vectors", lambda *_args, **_kwargs: False)
+    response = client.post("/query", json={"query": "where stop run"})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error"] == "No datasets indexed"
+
+
+def test_query_422_when_low_signal_evidence_is_weak(monkeypatch) -> None:
+    monkeypatch.setattr("legacylens.api._has_indexed_vectors", lambda *_args, **_kwargs: True)
+
+    def fake_retrieve_with_diagnostics(query, settings, codebase_path):
+        return RetrievalResult(
+            hits=[
+                RetrievalHit(
+                    file_path="sample.cob",
+                    line_start=97,
+                    line_end=98,
+                    text="DISPLAY X-P3",
+                    score=0.2644,
+                    metadata={},
+                ),
+                RetrievalHit(
+                    file_path="sample.cob",
+                    line_start=99,
+                    line_end=100,
+                    text="DISPLAY X-P4",
+                    score=0.2591,
+                    metadata={},
+                ),
+            ],
+            diagnostics=RetrievalDiagnostics(
+                latency_ms=200,
+                top1_score=0.2644,
+                chunks_returned=2,
+                hybrid_triggered=False,
+                semantic_hits=2,
+                fallback_hits=0,
+                top2_score=0.2591,
+                score_gap=0.0053,
+                confidence_level="medium",
+                query_intent="general",
+                query_entities=0,
+                rerank_applied=True,
+            ),
+        )
+
+    monkeypatch.setattr("legacylens.api.retrieve_with_diagnostics", fake_retrieve_with_diagnostics)
+    response = client.post("/query", json={"query": "alpha beta gamma"})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error"] == "Not enough evidence for a reliable answer"
+
+    monkeypatch.setattr("legacylens.api.generate_answer", lambda *_args, **_kwargs: "relaxed answer")
+    relaxed_response = client.post("/query", json={"query": "alpha beta gamma", "relaxed_thresholds": True})
+    assert relaxed_response.status_code == 200
+    relaxed_payload = relaxed_response.json()
+    assert relaxed_payload["answer"] == "relaxed answer"
+
+
 def test_query_debug_mode_returns_debug_hits(monkeypatch) -> None:
     def fake_retrieve_with_diagnostics(query, settings, codebase_path):
         from legacylens.models import RetrievalHit

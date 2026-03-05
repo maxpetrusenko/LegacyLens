@@ -1,19 +1,29 @@
+class ApiError extends Error {
+  constructor(message, detail = null) {
+    super(message);
+    this.name = "ApiError";
+    this.detail = detail;
+  }
+}
+
 async function _parseResponse(res) {
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
+    let detail = null;
     try {
       const err = await res.json();
       if (typeof err.detail === "string") {
         msg = err.detail;
       } else if (err.detail && typeof err.detail === "object") {
-        msg = JSON.stringify(err.detail);
+        detail = err.detail;
+        msg = err.detail.error || msg;
       } else if (typeof err.message === "string") {
         msg = err.message;
       }
     } catch {
       // Keep generic message when response body is not JSON.
     }
-    throw new Error(msg);
+    throw new ApiError(msg, detail);
   }
   return res.json();
 }
@@ -49,23 +59,29 @@ export function parseSSEChunks(input, previousRemainder = "") {
   return { events, remainder };
 }
 
-export async function queryCodebase(query) {
+export async function queryCodebase(query, { relaxedThresholds = false } = {}) {
   const res = await fetch("/query", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, relaxed_thresholds: Boolean(relaxedThresholds) }),
   });
   return _parseResponse(res);
 }
 
 export async function queryCodebaseStream(
   query,
-  { onToken = () => {}, onContext = () => {}, onDone = () => {}, onError = () => {} } = {},
+  {
+    onToken = () => {},
+    onContext = () => {},
+    onDone = () => {},
+    onError = () => {},
+    relaxedThresholds = false,
+  } = {},
 ) {
   const res = await fetch("/query/stream", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, relaxed_thresholds: Boolean(relaxedThresholds) }),
   });
   if (!res.ok) {
     return _parseResponse(res);
@@ -97,7 +113,7 @@ export async function queryCodebaseStream(
         onDone(event.data);
       } else if (event.event === "error") {
         onError(event.data);
-        throw new Error(event.data?.error || "Stream error");
+        throw new ApiError(event.data?.error || "Stream error", event.data && typeof event.data === "object" ? event.data : null);
       }
     }
   }

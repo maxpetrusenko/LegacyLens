@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     fallback_gap_threshold: float = 0.15
     confidence_low_threshold: float = 0.15
     confidence_medium_threshold: float = 0.35
+    answer_min_top1_score: float = 0.30
+    answer_min_score_gap: float = 0.02
     semantic_timeout: float = 1.5
     embedding_timeout: float = 20.0
     llm_timeout: float = 30.0

@@ -23,6 +23,7 @@ pip install -e ".[dev]"
   - syntax-aware chunking
   - OpenAI embeddings (`text-embedding-3-small`)
   - Qdrant semantic retrieval + keyword fallback
+  - query guardrails (vague input rejection, empty-index rejection, weak-evidence abstain)
   - answer generation + citations-only fallback
   - SSE streaming endpoint (`POST /query/stream`)
 

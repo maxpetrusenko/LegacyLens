@@ -1,6 +1,6 @@
-import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js?v=20260305g";
-import { initCharts, updateCharts } from "./charts.js?v=20260305g";
-import { clearGraph, renderGraph, getGraphStats } from "./graph.js?v=20260305g";
+import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js?v=20260305h";
+import { initCharts, updateCharts } from "./charts.js?v=20260305h";
+import { clearGraph, renderGraph, getGraphStats } from "./graph.js?v=20260305h";
 import {
   addToQueryLog,
   clearQueryLog,
@@ -23,7 +23,7 @@ import {
   setQueryLoading,
   toggleMetaDetails,
   updateSessionStats,
-} from "./ui.js?v=20260305g";
+} from "./ui.js?v=20260305h";
 
 const queryForm = document.getElementById("query-form");
 const queryInput = document.getElementById("query-input");
@@ -39,6 +39,7 @@ let graphLibReady = false;
 const fusionEnabled = false;
 let theme = "light";
 let lastSources = [];
+let metaSnapshot = {};
 const QUERY_LOG_STORAGE_KEY = "legacylens-query-log";
 const QUERY_LOG_LIMIT = 50;
 
@@ -185,7 +186,7 @@ async function ensureGraphLib() {
   graphLibReady = true;
 }
 
-async function runQuery(query) {
+async function runQuery(query, { relaxedThresholds = false } = {}) {
   if (!query) {
     return;
   }
@@ -207,7 +208,7 @@ async function runQuery(query) {
       renderSources(sources);
       renderDiagnostics(payload.diagnostics || {});
       renderFallback(payload.fallback || { active: false });
-      renderMetaStrip({}, payload.query_meta || {});
+      renderMetaStrip(metaSnapshot, payload.query_meta || {});
       updateCharts(payload.diagnostics || {}, sources);
 
       const inferredSymbol = inferGraphSymbol(query, sources);
@@ -234,6 +235,7 @@ async function runQuery(query) {
       answerEl.textContent = "";
     }
     const payload = await queryCodebaseStream(query, {
+      relaxedThresholds,
       onToken: (event) => {
         const token = typeof event?.token === "string" ? event.token : "";
         if (!token) {
@@ -248,7 +250,7 @@ async function runQuery(query) {
         });
       },
     }).catch(async (error) => {
-      const fallbackPayload = await queryCodebase(query);
+      const fallbackPayload = await queryCodebase(query, { relaxedThresholds });
       renderAnswer(fallbackPayload.answer || "");
       return fallbackPayload;
     });
@@ -270,6 +272,9 @@ async function runQuery(query) {
     });
     setStatus("Ready");
   } catch (error) {
+    const detail = error && typeof error === "object" && error.detail && typeof error.detail === "object"
+      ? error.detail
+      : null;
     renderAnswer("Query failed.");
     renderResponseLayout({
       query,
@@ -283,15 +288,13 @@ async function runQuery(query) {
     renderDiagnostics({});
     renderFallback({ active: false });
     updateCharts({}, []);
-    if (error && typeof error.message === "string") {
-      try {
-        const payload = JSON.parse(error.message);
-        renderLowConfidence(payload);
-      } catch {
-        renderLowConfidence(null);
-      }
-    }
-    renderQueryError(error);
+    lastSources = [];
+    clearGraph();
+    renderCallers([]);
+    renderGraphStats({ nodeCount: 0, edgeCount: 0, edgesByRelation: {} });
+    setGraphEmpty(true, "No dependency context for this query. Run a successful query or map a symbol directly.");
+    renderLowConfidence(detail);
+    renderQueryError(detail || error);
     setStatus("Error");
   } finally {
     clearQueryLoading();
@@ -301,9 +304,11 @@ async function runQuery(query) {
 async function hydrateMeta() {
   try {
     const meta = await getMeta();
-    renderMetaStrip(meta, {});
+    metaSnapshot = meta || {};
+    renderMetaStrip(metaSnapshot, {});
   } catch (_error) {
-    renderMetaStrip({}, {});
+    metaSnapshot = {};
+    renderMetaStrip(metaSnapshot, {});
   }
 }
 
@@ -470,7 +475,7 @@ document.addEventListener("keydown", async (event) => {
 window.addEventListener("legacylens:retry-relaxed", async () => {
   const raw = queryInput.value.trim();
   if (!raw) return;
-  await runQuery(`${raw} broader context`);
+  await runQuery(raw, { relaxedThresholds: true });
 });
 
 setStatus("Ready");

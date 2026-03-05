@@ -34,6 +34,8 @@ export const el = {
   fusionToggle: byId("fusion-toggle"),
   metaToggle: byId("meta-toggle"),
   metaDetails: byId("meta-details"),
+  datasetLabel: byId("dataset-label"),
+  datasetList: byId("dataset-list"),
   metaDataset: byId("meta-dataset"),
   metaVectors: byId("meta-vectors"),
   metaDims: byId("meta-dims"),
@@ -357,11 +359,18 @@ if (el.lowConfidenceRetry) {
 }
 
 export function renderQueryError(error) {
-  if (error && typeof error === "object" && error.message) {
-    el.queryError.textContent = String(error.message);
-    return;
+  if (error && typeof error === "object") {
+    if (typeof error.error === "string") {
+      const action = typeof error.action === "string" ? ` ${error.action}` : "";
+      el.queryError.textContent = `${error.error}.${action}`.trim();
+      return;
+    }
+    if (typeof error.message === "string") {
+      el.queryError.textContent = String(error.message);
+      return;
+    }
   }
-  el.queryError.textContent = String(error);
+  el.queryError.textContent = String(error || "");
 }
 
 export function renderCallers(callers = []) {
@@ -499,8 +508,21 @@ export function renderGraphLegend() {
 }
 
 export function renderMetaStrip(meta = {}, queryMeta = {}) {
+  const vectorCount = Number.isFinite(Number(meta.vector_count)) ? Number(meta.vector_count) : null;
+  const dataset = meta.default_codebase ? String(meta.default_codebase).split("/").pop() : "-";
+  const hasDataset = Boolean(dataset && dataset !== "-" && vectorCount !== null && vectorCount > 0);
+
+  if (el.datasetLabel) {
+    el.datasetLabel.textContent = hasDataset ? dataset : "None loaded";
+  }
+  if (el.datasetList) {
+    if (hasDataset) {
+      el.datasetList.innerHTML = `<span class="dataset-chip">${_escapeHtml(dataset)} · ${vectorCount} vectors</span>`;
+    } else {
+      el.datasetList.innerHTML = '<span class="strip-empty">No datasets indexed yet.</span>';
+    }
+  }
   if (el.metaDataset) {
-    const dataset = meta.default_codebase ? String(meta.default_codebase).split("/").pop() : "-";
     el.metaDataset.textContent = dataset || "-";
   }
   if (el.metaVectors) {

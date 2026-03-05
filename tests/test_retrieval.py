@@ -66,6 +66,8 @@ def test_retrieve_with_diagnostics_gracefully_handles_missing_qdrant(tmp_path) -
     assert result.diagnostics.retrieval_error is not None
     assert result.diagnostics.confidence_level in {"low", "medium"}
     assert result.diagnostics.query_intent == "general"
+    assert result.diagnostics.top2_score >= 0.0
+    assert result.diagnostics.score_gap >= 0.0
 
 
 def test_parse_query_intent_entities_dependency() -> None:

@@ -383,6 +383,8 @@ def retrieve_with_diagnostics(
         )
 
     top1_score = final_hits[0].score if final_hits else 0.0
+    top2_score = final_hits[1].score if len(final_hits) > 1 else 0.0
+    score_gap = max(0.0, top1_score - top2_score) if final_hits else 0.0
     diagnostics = RetrievalDiagnostics(
         latency_ms=int((perf_counter() - started) * 1000),
         top1_score=top1_score,
@@ -390,6 +392,8 @@ def retrieve_with_diagnostics(
         hybrid_triggered=fallback_mode == "keyword",
         semantic_hits=semantic_hits_count,
         fallback_hits=len(fallback_hits),
+        top2_score=top2_score,
+        score_gap=score_gap,
         confidence_level=classify_confidence(
             top1_score,
             settings.confidence_low_threshold,

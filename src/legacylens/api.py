@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
@@ -26,6 +27,20 @@ app = FastAPI(title="LegacyLens MVP")
 WEB_DIR = Path(__file__).parent / "web"
 app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
+_WORD_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+_CHITCHAT_PHRASES = {
+    "hi",
+    "hello",
+    "hello there",
+    "hey",
+    "hey there",
+    "yo",
+    "sup",
+    "thanks",
+    "thank you",
+}
+_CHITCHAT_TOKENS = {"hi", "hello", "hey", "yo", "sup", "there", "thanks", "thank", "you"}
+
 
 def _default_codebase_path(explicit: str | None) -> str:
     if explicit:
@@ -45,6 +60,7 @@ class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1)
     codebase_path: str | None = None
     debug: bool = False
+    relaxed_thresholds: bool = False
 
 
 class SourceRef(BaseModel):
@@ -233,6 +249,94 @@ def _new_answer_id() -> str:
     return f"ans_{ts}_{uuid4().hex[:8]}"
 
 
+def _query_tokens(query: str) -> list[str]:
+    return [token.lower() for token in _WORD_PATTERN.findall(query)]
+
+
+def _is_query_underspecified(query: str) -> tuple[bool, str | None]:
+    normalized = query.strip()
+    if len(normalized) <= 1:
+        return True, "single_character"
+    lowered = normalized.lower()
+    if lowered in _CHITCHAT_PHRASES:
+        return True, "chitchat"
+    tokens = _query_tokens(normalized)
+    if tokens and len(tokens) <= 2 and all(token in _CHITCHAT_TOKENS for token in tokens):
+        return True, "chitchat"
+    return False, None
+
+
+def _query_hint_detail(reason: str | None = None) -> dict[str, object]:
+    return {
+        "error": "Query too vague",
+        "reason": reason or "missing_intent",
+        "action": "Ask a COBOL-specific question with a symbol, behavior, or file hint.",
+        "suggestions": [
+            "Where is FILE STATUS checked before STOP RUN?",
+            "Show callers of DUMP and their source lines.",
+            "Trace READ-FILE flow from OPEN to CLOSE.",
+        ],
+        "retry": {"relaxed_thresholds": False, "how": "Rephrase with COBOL terms and rerun."},
+    }
+
+
+def _no_dataset_detail() -> dict[str, object]:
+    return {
+        "error": "No datasets indexed",
+        "action": "Ingest and index a COBOL dataset before querying.",
+        "suggestions": [
+            "Run ingestion for your codebase to create vectors.",
+            "Verify Qdrant collection has points.",
+            "Refresh the console after indexing completes.",
+        ],
+        "retry": {"relaxed_thresholds": False, "how": "Index data first, then rerun the same query."},
+    }
+
+
+def _insufficient_evidence_detail(top1_score: float, score_gap: float) -> dict[str, object]:
+    return {
+        "error": "Not enough evidence for a reliable answer",
+        "action": "Refine query with stronger COBOL anchors so retrieval can isolate relevant code.",
+        "scores": {"top1": round(top1_score, 4), "gap": round(score_gap, 4)},
+        "suggestions": [
+            "Include exact symbols like READ-FILE, MAIN-PARA, or STOP RUN.",
+            "Add a file hint like numeric-display.cob.",
+            "Ask one concrete behavior question instead of broad text.",
+        ],
+        "retry": {"relaxed_thresholds": True, "how": "Use Retry with broader search only after adding anchors."},
+    }
+
+
+def _is_low_signal_query(diagnostics) -> bool:
+    return diagnostics.query_intent == "general" and diagnostics.query_entities == 0
+
+
+def _should_abstain_for_low_evidence(
+    hits, diagnostics, settings: Settings, *, relaxed_thresholds: bool = False
+) -> bool:
+    if not hits or not _is_low_signal_query(diagnostics):
+        return False
+    min_top1 = settings.answer_min_top1_score
+    min_gap = settings.answer_min_score_gap
+    if relaxed_thresholds:
+        min_top1 = max(0.0, min_top1 - 0.08)
+        min_gap = max(0.0, min_gap - 0.015)
+    top1 = float(getattr(diagnostics, "top1_score", 0.0) or 0.0)
+    score_gap = float(getattr(diagnostics, "score_gap", 0.0) or 0.0)
+    if top1 < min_top1:
+        return True
+    if len(hits) > 1 and score_gap < min_gap:
+        return True
+    return False
+
+
+def _has_indexed_vectors(settings: Settings) -> bool | None:
+    count = _collection_meta(settings).get("vector_count")
+    if isinstance(count, int):
+        return count > 0
+    return None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -270,8 +374,15 @@ def meta() -> dict[str, str | int | None]:
 
 @app.post("/query", response_model=QueryResponse)
 def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
+    query_is_vague, reason = _is_query_underspecified(request.query)
+    if query_is_vague:
+        raise HTTPException(status_code=422, detail=_query_hint_detail(reason))
+
     settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
     effective_debug = bool(debug or request.debug)
+    has_vectors = _has_indexed_vectors(settings)
+    if has_vectors is False:
+        raise HTTPException(status_code=422, detail=_no_dataset_detail())
 
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
     if retrieval.diagnostics.retrieval_error and not retrieval.hits:
@@ -299,6 +410,19 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
                 ],
                 "retry": {"relaxed_thresholds": True, "how": "Click Retry with broader search in the UI."},
             },
+        )
+    if _should_abstain_for_low_evidence(
+        hits,
+        retrieval.diagnostics,
+        settings,
+        relaxed_thresholds=request.relaxed_thresholds,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=_insufficient_evidence_detail(
+                retrieval.diagnostics.top1_score,
+                retrieval.diagnostics.score_gap,
+            ),
         )
 
     fallback = _fallback_from_diagnostics(retrieval.diagnostics)
@@ -338,7 +462,25 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
 
 @app.post("/query/stream")
 def query_codebase_stream(request: QueryRequest):
+    query_is_vague, reason = _is_query_underspecified(request.query)
+    if query_is_vague:
+        detail = _query_hint_detail(reason)
+
+        def blocked_stream():
+            yield _stream_event("error", detail)
+
+        headers = {"Cache-Control": "no-cache", "Connection": "keep-alive"}
+        return StreamingResponse(blocked_stream(), media_type="text/event-stream", headers=headers)
+
     settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
+    has_vectors = _has_indexed_vectors(settings)
+    if has_vectors is False:
+
+        def empty_dataset_stream():
+            yield _stream_event("error", _no_dataset_detail())
+
+        headers = {"Cache-Control": "no-cache", "Connection": "keep-alive"}
+        return StreamingResponse(empty_dataset_stream(), media_type="text/event-stream", headers=headers)
 
     def event_stream():
         retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
@@ -366,6 +508,21 @@ def query_codebase_stream(request: QueryRequest):
                         "Retry with broader phrasing and fewer constraints.",
                     ],
                 },
+            )
+            return
+
+        if _should_abstain_for_low_evidence(
+            hits,
+            retrieval.diagnostics,
+            settings,
+            relaxed_thresholds=request.relaxed_thresholds,
+        ):
+            yield _stream_event(
+                "error",
+                _insufficient_evidence_detail(
+                    retrieval.diagnostics.top1_score,
+                    retrieval.diagnostics.score_gap,
+                ),
             )
             return
 
