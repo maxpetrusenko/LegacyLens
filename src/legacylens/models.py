@@ -61,6 +61,10 @@ class RetrievalDiagnostics:
     query_entities: int = 0
     rerank_applied: bool = False
     retrieval_error: str | None = None
+    fallback_reason: str | None = None
+    fallback_mode: str | None = None
+    fallback_severity: str | None = None
+    degraded_quality: bool = False
 
 
 @dataclass(slots=True)
@@ -69,4 +73,13 @@ class RetrievalResult:
     diagnostics: RetrievalDiagnostics
 
 
-__all__ = ["CodeChunk", "RetrievalHit", "RetrievalDiagnostics", "RetrievalResult"]
+@dataclass(slots=True)
+class FallbackState:
+    active: bool = False
+    mode: str | None = None
+    reason: str | None = None
+    severity: str | None = None
+    degraded_quality: bool = False
+
+
+__all__ = ["CodeChunk", "FallbackState", "RetrievalHit", "RetrievalDiagnostics", "RetrievalResult"]

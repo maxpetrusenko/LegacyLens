@@ -23,7 +23,7 @@ def run_ingest(codebase_path: str) -> None:
 def run_query(query: str, codebase_path: str | None) -> None:
     settings = Settings(codebase_path=codebase_path or ".")
     retrieval = retrieve_with_diagnostics(query, settings, Path(settings.codebase_path))
-    if retrieval.diagnostics.retrieval_error:
+    if retrieval.diagnostics.retrieval_error and not retrieval.hits:
         raise RuntimeError(
             "Retrieval failed: "
             f"{retrieval.diagnostics.retrieval_error}. "

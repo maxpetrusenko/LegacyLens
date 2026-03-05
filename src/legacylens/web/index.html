@@ -65,6 +65,10 @@
           <button id="fusion-toggle" type="button" class="fusion-toggle" aria-pressed="false">Fusion OFF</button>
           <div id="kpi-chips" class="kpi-chip-row" aria-label="Query KPI chips"></div>
         </div>
+        <div id="fallback-banner" class="fallback-banner is-info" role="status" aria-live="polite" style="display: none">
+          <span id="fallback-text"></span>
+          <button id="fallback-dismiss" type="button" class="fallback-dismiss">Dismiss</button>
+        </div>
         <div class="quick-row" role="list" aria-label="Quick prompts">
           <button type="button" class="chip" data-q="Where is file I/O handled?">I/O flow</button>
           <button type="button" class="chip" data-q="What calls DUMP?">DUMP callers</button>
@@ -106,16 +110,32 @@
 
       <section class="results-grid">
         <article class="panel answer-panel">
+          <div id="answer-structured-meta" class="answer-structured-meta">
+            <p class="structured-query">Run a query to see structured response metadata.</p>
+          </div>
           <div class="panel-head">
-            <h2>Answer</h2>
+            <div class="panel-head-stack">
+              <h2>AI Explanation</h2>
+              <p id="answer-model-meta" class="answer-model-meta">Model unavailable</p>
+            </div>
+            <div class="answer-head-actions">
+              <code id="answer-id" class="answer-id" title="Answer ID">-</code>
+              <button id="copy-answer-id" type="button" class="mini-btn">Copy ID</button>
+              <span id="generating-indicator" class="generating-indicator" role="status" aria-live="polite" style="display: none">Generating</span>
+            </div>
           </div>
           <pre id="answer-text" class="answer-text">Run a query to see synthesized output.</pre>
           <p id="query-error" class="state error"></p>
+          <section id="low-confidence" class="low-confidence" style="display: none" aria-live="polite">
+            <h3>Low confidence guidance</h3>
+            <ul id="low-confidence-list"></ul>
+            <button id="low-confidence-retry" type="button">Retry with broader search</button>
+          </section>
         </article>
 
         <aside class="panel sources-panel">
           <div class="panel-head">
-            <h2>Matched Sources</h2>
+            <h2 id="sources-title">Source Code (0 matches)</h2>
           </div>
           <ul id="sources-list" class="sources-list"></ul>
           <p id="sources-empty" class="state empty">No sources yet.</p>

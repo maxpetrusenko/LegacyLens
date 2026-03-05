@@ -9,7 +9,7 @@ from legacylens.embeddings import build_embedding_provider
 from legacylens.models import CodeChunk
 from legacylens.vector_store import QdrantStore
 
-COBOL_EXTENSIONS = {".cob", ".cbl", ".cpy", ".cobol"}
+COBOL_EXTENSIONS = {".cob", ".cbl", ".cpy", ".cobol", ".at"}
 LOGGER = logging.getLogger(__name__)
 
 

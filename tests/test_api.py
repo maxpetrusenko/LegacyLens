@@ -165,6 +165,7 @@ def test_query_entry_point_uses_semantic_retrieval(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["answer"] == "semantic answer"
+    assert payload["answer_id"].startswith("ans_")
     assert payload["diagnostics"]["query_intent"] == "semantic"
     assert len(payload["sources"]) == 1
     assert payload["query_meta"] == _default_query_meta()
@@ -227,6 +228,52 @@ def test_query_source_includes_metadata_fields(monkeypatch) -> None:
     assert source["tags"] == ["io", "file-handle"]
     assert source["language"] == "cobol"
     assert payload["query_meta"] == _default_query_meta()
+
+
+def test_query_sources_dedupe_repo_prefixed_paths(monkeypatch) -> None:
+    def fake_retrieve_with_diagnostics(query, settings, codebase_path):
+        return RetrievalResult(
+            hits=[
+                RetrievalHit(
+                    file_path="repos/gnucobol/tests/testsuite.src/numeric-dump.cob",
+                    line_start=170,
+                    line_end=171,
+                    text="CALL \"dump\" USING G-3",
+                    score=0.65,
+                    metadata={},
+                ),
+                RetrievalHit(
+                    file_path="gnucobol/tests/testsuite.src/numeric-dump.cob",
+                    line_start=170,
+                    line_end=171,
+                    text="CALL \"dump\" USING G-3",
+                    score=0.61,
+                    metadata={},
+                ),
+            ],
+            diagnostics=RetrievalDiagnostics(
+                latency_ms=100,
+                top1_score=0.65,
+                chunks_returned=2,
+                hybrid_triggered=False,
+                semantic_hits=2,
+                fallback_hits=0,
+                confidence_level="high",
+                query_intent="dependency",
+                query_entities=1,
+                rerank_applied=False,
+                retrieval_error=None,
+            ),
+        )
+
+    monkeypatch.setattr("legacylens.api.retrieve_with_diagnostics", fake_retrieve_with_diagnostics)
+    monkeypatch.setattr("legacylens.api.generate_answer", lambda *args, **kwargs: "test answer")
+
+    response = client.post("/query", json={"query": "What calls dump?"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["sources"]) == 1
+    assert payload["sources"][0]["file_path"] == "gnucobol/tests/testsuite.src/numeric-dump.cob"
 
 
 def test_graph_typed_edges_with_perform_and_call(tmp_path: Path, monkeypatch) -> None:

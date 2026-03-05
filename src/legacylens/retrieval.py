@@ -21,6 +21,12 @@ QUOTED_PATTERN = re.compile(r"[\"']([A-Za-z0-9_-]+)[\"']")
 DEPENDENCY_PATTERN = re.compile(r"\b(?:perform|call)\s+([A-Za-z0-9-]+)", re.IGNORECASE)
 
 
+class _SemanticDependencyError(RuntimeError):
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 def format_citation(file_path: str, line_start: int, line_end: int) -> str:
     return f"[{file_path}:{line_start}-{line_end}]"
 
@@ -274,24 +280,46 @@ def _embed_query_cached(query: str, settings: Settings, provider) -> list[float]
     return vector
 
 
+def _reason_from_exception(exc: Exception, domain: str) -> str:
+    lowered = str(exc).lower()
+    if "timeout" in lowered or "timed out" in lowered:
+        return f"{domain}_timeout"
+    return f"{domain}_error"
+
+
+def _semantic_retrieve(expanded_query: str, settings: Settings) -> list[RetrievalHit]:
+    try:
+        provider = build_embedding_provider(settings)
+        vector = _embed_query_cached(expanded_query, settings, provider)
+    except Exception as exc:
+        raise _SemanticDependencyError(_reason_from_exception(exc, "embedding"), str(exc)) from exc
+
+    try:
+        store = QdrantStore(settings)
+        return store.search(vector, settings.top_k)
+    except Exception as exc:
+        raise _SemanticDependencyError(_reason_from_exception(exc, "qdrant"), str(exc)) from exc
+
+
 def retrieve_with_diagnostics(
     query: str, settings: Settings, codebase_path: Path | None = None
 ) -> RetrievalResult:
     started = perf_counter()
     effective_codebase = codebase_path or Path(settings.codebase_path)
     semantic_hits: list[RetrievalHit] = []
+    fallback_hits: list[RetrievalHit] = []
     retrieval_error: str | None = None
+    fallback_reason: str | None = None
+    fallback_mode: str | None = None
+    fallback_severity: str | None = None
+    degraded_quality = False
     expanded_query = query.strip()
+    query_intent, query_entities, expanded_query = parse_query_intent_entities(query)
+    rerank_applied = False
 
     try:
-        def _semantic_retrieve() -> list[RetrievalHit]:
-            store = QdrantStore(settings)
-            provider = build_embedding_provider(settings)
-            vector = _embed_query_cached(expanded_query, settings, provider)
-            return store.search(vector, settings.top_k)
-
         pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(_semantic_retrieve)
+        future = pool.submit(_semantic_retrieve, expanded_query, settings)
         try:
             semantic_hits = future.result(timeout=settings.semantic_timeout_sec)
         finally:
@@ -299,14 +327,36 @@ def retrieve_with_diagnostics(
     except FutureTimeoutError:
         semantic_hits = []
         retrieval_error = "semantic retrieval timed out"
+        fallback_reason = "qdrant_timeout"
+    except _SemanticDependencyError as exc:
+        semantic_hits = []
+        retrieval_error = str(exc)
+        fallback_reason = exc.reason
     except Exception as exc:
         semantic_hits = []
         retrieval_error = str(exc)
+        fallback_reason = "qdrant_error"
 
-    merged = dedupe_hits(semantic_hits)
+    semantic_hits = dedupe_hits(semantic_hits)
+    semantic_hits_count = len(semantic_hits)
+    if semantic_hits:
+        semantic_hits = rerank_hits(semantic_hits, query, query_intent, query_entities)
+        rerank_applied = True
 
+    if not semantic_hits:
+        if fallback_reason is None:
+            fallback_reason = "empty_vector_results"
+        fallback_hits = dedupe_hits(keyword_fallback(query, effective_codebase, settings.top_k))
+        if fallback_hits:
+            fallback_hits = rerank_hits(fallback_hits, query, query_intent, query_entities)
+            rerank_applied = True
+            fallback_mode = "keyword"
+            fallback_severity = "info"
+            degraded_quality = True
+
+    selected_hits = semantic_hits if semantic_hits else fallback_hits
     final_hits: list[RetrievalHit] = []
-    for hit in merged[: settings.answer_k]:
+    for hit in selected_hits[: settings.answer_k]:
         expanded = _expand_context(effective_codebase, hit, settings.context_expand_lines)
         final_hits.append(
             RetrievalHit(
@@ -318,23 +368,28 @@ def retrieve_with_diagnostics(
                 metadata=hit.metadata,
             )
         )
-    top1_score = semantic_hits[0].score if semantic_hits else 0.0
+
+    top1_score = final_hits[0].score if final_hits else 0.0
     diagnostics = RetrievalDiagnostics(
         latency_ms=int((perf_counter() - started) * 1000),
         top1_score=top1_score,
         chunks_returned=len(final_hits),
-        hybrid_triggered=False,
-        semantic_hits=len(semantic_hits),
-        fallback_hits=0,
+        hybrid_triggered=fallback_mode == "keyword",
+        semantic_hits=semantic_hits_count,
+        fallback_hits=len(fallback_hits),
         confidence_level=classify_confidence(
             top1_score,
             settings.confidence_low_threshold,
             settings.confidence_medium_threshold,
         ),
-        query_intent="semantic",
-        query_entities=0,
-        rerank_applied=False,
+        query_intent=query_intent,
+        query_entities=len(query_entities),
+        rerank_applied=rerank_applied,
         retrieval_error=retrieval_error,
+        fallback_reason=fallback_reason if fallback_mode else None,
+        fallback_mode=fallback_mode,
+        fallback_severity=fallback_severity,
+        degraded_quality=degraded_quality,
     )
     return RetrievalResult(hits=final_hits, diagnostics=diagnostics)
 

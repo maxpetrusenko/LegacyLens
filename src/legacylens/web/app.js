@@ -1,4 +1,4 @@
-import { getCallers, getGraph, getMeta, queryCodebase } from "./api-client.js";
+import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js";
 import { initCharts, updateCharts } from "./charts.js";
 import { renderGraph, getGraphStats } from "./graph.js";
 import {
@@ -8,6 +8,9 @@ import {
   renderAnswer,
   renderCallers,
   renderDiagnostics,
+  renderFallback,
+  renderLowConfidence,
+  renderResponseLayout,
   renderGraphLegend,
   renderGraphStats,
   renderKpiChips,
@@ -56,15 +59,40 @@ function _updateSessionStats() {
   });
 }
 
-function _recordQuery(diagnostics, sources) {
+function _summarizeAnswerForLog(answer) {
+  const compact = String(answer || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "No summary generated.";
+  return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+}
+
+function _evidenceForLog(sources = []) {
+  const top = (sources || [])[0];
+  if (!top) return "No source lines.";
+  const filePath = top.file_path || "unknown";
+  const start = Number(top.line_start || 0);
+  const end = Number(top.line_end || 0);
+  if (start > 0 && end > 0) {
+    return `${filePath}:L${start}-${end}`;
+  }
+  return filePath;
+}
+
+function _recordQuery({ diagnostics = {}, sources = [], answer = "", answerId = "-" } = {}) {
   session.queryCount += 1;
   session.similaritySum += Number(diagnostics.top1_score || 0);
   for (const s of sources || []) {
     session.filesSeen.add(s.file_path);
   }
   _updateSessionStats();
-  addToQueryLog({ query: queryInput.value, ts: Date.now(), topScore: Number(diagnostics.top1_score || 0) });
-  renderKpiChips(diagnostics, sources);
+  addToQueryLog({
+    query: queryInput.value,
+    ts: Date.now(),
+    topScore: Number(diagnostics.top1_score || 0),
+    answerId,
+    summary: _summarizeAnswerForLog(answer),
+    evidence: _evidenceForLog(sources),
+  });
+  renderKpiChips(diagnostics, sources, { fusionEnabled });
   renderQueryLog();
 }
 
@@ -114,18 +142,57 @@ async function runQuery(query) {
   if (!query) {
     return;
   }
-  setQueryLoading();
+  setQueryLoading(query, fusionEnabled);
+  renderFallback({ active: false });
   try {
-    const payload = await queryCodebase(query);
+    let streamedAnswer = "";
+    const answerEl = document.getElementById("answer-text");
+    if (answerEl) {
+      answerEl.textContent = "";
+    }
+    const payload = await queryCodebaseStream(query, {
+      onToken: (event) => {
+        const token = typeof event?.token === "string" ? event.token : "";
+        if (!token) {
+          return;
+        }
+        streamedAnswer += token;
+        renderAnswer(streamedAnswer);
+      },
+    }).catch(async (error) => {
+      const fallbackPayload = await queryCodebase(query);
+      renderAnswer(fallbackPayload.answer || "");
+      return fallbackPayload;
+    });
     await ensureChartLib();
-    renderAnswer(payload.answer);
+    const finalAnswer = payload.answer || streamedAnswer;
+    renderResponseLayout({
+      query,
+      diagnostics: payload.diagnostics || {},
+      sources: payload.sources || [],
+      queryMeta: payload.query_meta || {},
+      fusionEnabled,
+      answerId: payload.answer_id || "-",
+    });
+    if (finalAnswer) {
+      renderAnswer(finalAnswer);
+    } else {
+      renderAnswer("No answer generated.");
+    }
     const sources = payload.sources || [];
     lastSources = sources;
     renderSources(sources);
     renderDiagnostics(payload.diagnostics || {});
+    renderFallback(payload.fallback || { active: false });
+    renderLowConfidence(null);
     renderMetaStrip({}, payload.query_meta || {});
     updateCharts(payload.diagnostics || {}, sources);
-    _recordQuery(payload.diagnostics || {}, sources);
+    _recordQuery({
+      diagnostics: payload.diagnostics || {},
+      sources,
+      answer: finalAnswer,
+      answerId: payload.answer_id || "-",
+    });
     const inferredSymbol = inferGraphSymbol(query, sources);
     if (inferredSymbol) {
       symbolInput.value = inferredSymbol;
@@ -134,9 +201,26 @@ async function runQuery(query) {
     setStatus("Ready");
   } catch (error) {
     renderAnswer("Query failed.");
+    renderResponseLayout({
+      query,
+      diagnostics: {},
+      sources: [],
+      queryMeta: {},
+      fusionEnabled,
+      answerId: "-",
+    });
     renderSources([]);
     renderDiagnostics({});
+    renderFallback({ active: false });
     updateCharts({}, []);
+    if (error && typeof error.message === "string") {
+      try {
+        const payload = JSON.parse(error.message);
+        renderLowConfidence(payload);
+      } catch {
+        renderLowConfidence(null);
+      }
+    }
     renderQueryError(error);
     setStatus("Error");
   } finally {
@@ -301,6 +385,12 @@ document.addEventListener("keydown", async (event) => {
     event.preventDefault();
     await runQuery(queryInput.value.trim());
   }
+});
+
+window.addEventListener("legacylens:retry-relaxed", async () => {
+  const raw = queryInput.value.trim();
+  if (!raw) return;
+  await runQuery(`${raw} broader context`);
 });
 
 setStatus("Ready");

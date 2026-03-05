@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
+import json
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from legacylens.answer import generate_answer
+from legacylens.answer import generate_answer, generate_citations_only, stream_answer_tokens
 from legacylens.config import Settings
 from legacylens.dependency_graph import (
     build_typed_edges_from_payloads,
@@ -66,11 +69,21 @@ class QueryMeta(BaseModel):
     qdrant_collection: str
 
 
+class FallbackMeta(BaseModel):
+    active: bool = False
+    mode: str | None = None
+    reason: str | None = None
+    severity: str | None = None
+    degraded_quality: bool = False
+
+
 class QueryResponse(BaseModel):
+    answer_id: str
     answer: str
     sources: list[SourceRef]
     diagnostics: dict[str, int | float | bool | str | None]
     confidence_label: str
+    fallback: FallbackMeta
     query_meta: QueryMeta
     debug_hits: list[SourceRef] | None = None
 
@@ -104,6 +117,76 @@ class GraphResponse(BaseModel):
     summary: GraphSummary
 
 
+def _query_meta(settings: Settings) -> QueryMeta:
+    use_voyage_model = settings.embed_provider == "voyage" or (
+        settings.embed_provider == "auto" and bool(settings.voyage_api_key)
+    )
+    return QueryMeta(
+        llm_model=settings.llm_model,
+        embed_provider=settings.embed_provider,
+        embed_model=settings.voyage_model if use_voyage_model else settings.openai_embed_model,
+        qdrant_collection=settings.qdrant_collection,
+    )
+
+
+def _sources_from_hits(hits) -> list[SourceRef]:
+    def canonical_path(value: str) -> str:
+        normalized = str(value or "").replace("\\", "/").lstrip("./")
+        if normalized.startswith("repos/"):
+            normalized = normalized[len("repos/") :]
+        return normalized or value
+
+    deduped: dict[tuple[str, int, int], SourceRef] = {}
+    for hit in hits:
+        normalized_path = canonical_path(hit.file_path)
+        key = (normalized_path, int(hit.line_start), int(hit.line_end))
+        candidate = SourceRef(
+            citation=format_citation(normalized_path, hit.line_start, hit.line_end),
+            score=hit.score,
+            text=hit.text,
+            file_path=normalized_path,
+            line_start=hit.line_start,
+            line_end=hit.line_end,
+            division=hit.metadata.get("division"),
+            section=hit.metadata.get("section"),
+            symbol_type=hit.metadata.get("symbol_type"),
+            symbol_name=hit.metadata.get("symbol_name"),
+            tags=hit.metadata.get("tags"),
+            language=hit.metadata.get("language"),
+        )
+        existing = deduped.get(key)
+        if existing is None or candidate.score > existing.score:
+            deduped[key] = candidate
+    return sorted(deduped.values(), key=lambda source: source.score, reverse=True)
+
+
+def _fallback_from_diagnostics(diagnostics) -> FallbackMeta:
+    active = bool(diagnostics.fallback_mode)
+    return FallbackMeta(
+        active=active,
+        mode=diagnostics.fallback_mode if active else None,
+        reason=diagnostics.fallback_reason if active else None,
+        severity=diagnostics.fallback_severity if active else None,
+        degraded_quality=diagnostics.degraded_quality if active else False,
+    )
+
+
+def _llm_failure_reason(exc: Exception) -> str:
+    lowered = str(exc).lower()
+    if "timeout" in lowered or "timed out" in lowered:
+        return "llm_timeout"
+    return "llm_error"
+
+
+def _stream_event(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
+
+
+def _new_answer_id() -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"ans_{ts}_{uuid4().hex[:8]}"
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -122,6 +205,7 @@ def meta() -> dict[str, str]:
         "status": "ok",
         "health": "/health",
         "query": "/query",
+        "query_stream": "/query/stream",
         "callers": "/callers/{symbol}",
         "graph": "/graph/{symbol}",
         "default_codebase": default_codebase,
@@ -136,7 +220,7 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
     effective_debug = bool(debug or request.debug)
 
     retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
-    if retrieval.diagnostics.retrieval_error:
+    if retrieval.diagnostics.retrieval_error and not retrieval.hits:
         raise HTTPException(
             status_code=503,
             detail={
@@ -152,10 +236,18 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
             status_code=422,
             detail={
                 "error": "No relevant context found",
+                "confidence": retrieval.diagnostics.confidence_level,
                 "action": "Refine query terms, ingest more code, or verify vector index coverage.",
+                "suggestions": [
+                    "Add an exact symbol name like READ-FILE or MAIN-PARA.",
+                    "Include a file hint such as sample.cob.",
+                    "Retry with broader phrasing and fewer constraints.",
+                ],
+                "retry": {"relaxed_thresholds": True, "how": "Click Retry with broader search in the UI."},
             },
         )
 
+    fallback = _fallback_from_diagnostics(retrieval.diagnostics)
     try:
         answer = generate_answer(
             request.query,
@@ -164,52 +256,145 @@ def query_codebase(request: QueryRequest, debug: bool = False) -> QueryResponse:
             confidence_level=retrieval.diagnostics.confidence_level,
         )
     except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Answer generation failed",
-                "cause": str(exc),
-                "action": "Verify LLM provider configuration and API credentials.",
-            },
-        ) from exc
-
-    sources = [
-        SourceRef(
-            citation=format_citation(hit.file_path, hit.line_start, hit.line_end),
-            score=hit.score,
-            text=hit.text,
-            file_path=hit.file_path,
-            line_start=hit.line_start,
-            line_end=hit.line_end,
-            division=hit.metadata.get("division"),
-            section=hit.metadata.get("section"),
-            symbol_type=hit.metadata.get("symbol_type"),
-            symbol_name=hit.metadata.get("symbol_name"),
-            tags=hit.metadata.get("tags"),
-            language=hit.metadata.get("language"),
+        answer = generate_citations_only(hits)
+        fallback = FallbackMeta(
+            active=True,
+            mode="citations_only",
+            reason=_llm_failure_reason(exc),
+            severity="error",
+            degraded_quality=True,
         )
-        for hit in hits
-    ]
+
+    sources = _sources_from_hits(hits)
     confidence = retrieval.diagnostics.confidence_level if retrieval.diagnostics else "unknown"
-    use_voyage_model = settings.embed_provider == "voyage" or (
-        settings.embed_provider == "auto" and bool(settings.voyage_api_key)
-    )
-    query_meta = QueryMeta(
-        llm_model=settings.llm_model,
-        embed_provider=settings.embed_provider,
-        embed_model=settings.voyage_model if use_voyage_model else settings.openai_embed_model,
-        qdrant_collection=settings.qdrant_collection,
-    )
+    query_meta = _query_meta(settings)
 
     debug_hits = sources[: min(5, len(sources))] if effective_debug else None
     return QueryResponse(
+        answer_id=_new_answer_id(),
         answer=answer,
         sources=sources,
         diagnostics=asdict(retrieval.diagnostics),
         confidence_label=confidence,
+        fallback=fallback,
         query_meta=query_meta,
         debug_hits=debug_hits,
     )
+
+
+@app.post("/query/stream")
+def query_codebase_stream(request: QueryRequest):
+    settings = Settings(codebase_path=_default_codebase_path(request.codebase_path))
+
+    def event_stream():
+        retrieval = retrieve_with_diagnostics(request.query, settings, Path(settings.codebase_path))
+        hits = retrieval.hits
+        if retrieval.diagnostics.retrieval_error and not hits:
+            yield _stream_event(
+                "error",
+                {
+                    "error": "Retrieval failed",
+                    "cause": retrieval.diagnostics.retrieval_error,
+                    "action": "Check embedding provider credentials, vector store connectivity, and ingestion status.",
+                },
+            )
+            return
+
+        if not hits:
+            yield _stream_event(
+                "error",
+                {
+                    "error": "No relevant context found",
+                    "confidence": retrieval.diagnostics.confidence_level,
+                    "suggestions": [
+                        "Add an exact symbol name like READ-FILE or MAIN-PARA.",
+                        "Include a file hint such as sample.cob.",
+                        "Retry with broader phrasing and fewer constraints.",
+                    ],
+                },
+            )
+            return
+
+        sources = _sources_from_hits(hits)
+        query_meta = _query_meta(settings)
+        fallback = _fallback_from_diagnostics(retrieval.diagnostics)
+        answer_parts: list[str] = []
+        answer_id = _new_answer_id()
+        emitted_tokens = False
+        finish_reason = "stop"
+        token_usage: dict[str, int] | None = None
+
+        try:
+            for event in stream_answer_tokens(
+                request.query,
+                hits,
+                settings,
+                confidence_level=retrieval.diagnostics.confidence_level,
+            ):
+                if event.get("type") == "token":
+                    token = str(event.get("token", ""))
+                    if token:
+                        emitted_tokens = True
+                        answer_parts.append(token)
+                        yield _stream_event("token", {"token": token})
+                elif event.get("type") == "done":
+                    finish_reason = str(event.get("finish_reason", "stop"))
+                    usage = event.get("usage")
+                    if isinstance(usage, dict):
+                        token_usage = {
+                            "prompt_tokens": int(usage.get("prompt_tokens", 0)),
+                            "completion_tokens": int(usage.get("completion_tokens", 0)),
+                            "total_tokens": int(usage.get("total_tokens", 0)),
+                        }
+        except Exception as exc:
+            if emitted_tokens:
+                yield _stream_event(
+                    "error",
+                    {
+                        "error": "Answer stream failed",
+                        "cause": str(exc),
+                        "reason": _llm_failure_reason(exc),
+                    },
+                )
+                return
+            answer = generate_citations_only(hits)
+            fallback = FallbackMeta(
+                active=True,
+                mode="citations_only",
+                reason=_llm_failure_reason(exc),
+                severity="error",
+                degraded_quality=True,
+            )
+            payload = QueryResponse(
+                answer_id=answer_id,
+                answer=answer,
+                sources=sources,
+                diagnostics=asdict(retrieval.diagnostics),
+                confidence_label=retrieval.diagnostics.confidence_level,
+                fallback=fallback,
+                query_meta=query_meta,
+                debug_hits=None,
+            ).model_dump()
+            payload["stream"] = {"finish_reason": "fallback", "usage": None}
+            yield _stream_event("done", payload)
+            return
+
+        answer = "".join(answer_parts)
+        payload = QueryResponse(
+            answer_id=answer_id,
+            answer=answer,
+            sources=sources,
+            diagnostics=asdict(retrieval.diagnostics),
+            confidence_label=retrieval.diagnostics.confidence_level,
+            fallback=fallback,
+            query_meta=query_meta,
+            debug_hits=None,
+        ).model_dump()
+        payload["stream"] = {"finish_reason": finish_reason, "usage": token_usage}
+        yield _stream_event("done", payload)
+
+    headers = {"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
 
 
 @app.get("/callers/{symbol}", response_model=CallersResponse)

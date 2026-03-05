@@ -1,17 +1,12 @@
-# LegacyLens MVP
+# LegacyLens
 
-RAG pipeline for legacy COBOL codebases with:
-- COBOL-aware chunking (PROCEDURE DIVISION paragraph boundaries + fallback windows)
-- Embeddings (Voyage Code 2 or OpenAI)
-- Qdrant vector search
-- Hybrid fallback search via `rg`
-- Query embedding cache (in-process LRU)
-- Dependency graph generation (`PERFORM`/`CALL`) for caller lookup
-- Precision@k evaluation harness with per-query logs
-- Query answering with file/line citations
-- CLI and FastAPI interfaces
+LegacyLens is a RAG system for legacy COBOL codebases with citation-grounded answers, dependency mapping, and explicit fallback UX.
 
-## Setup
+## Live Demo
+- App: `<DEPLOYED_URL>`
+- Video: `<DEMO_VIDEO_URL>`
+
+## Quick Start
 
 ```bash
 python -m venv .venv
@@ -19,94 +14,40 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Environment
+## Full Setup
+- See `docs/SETUP.md` for env vars, local Qdrant setup, ingest commands, and validation gates.
 
-Set one embedding provider:
+## Architecture Overview
+- See `docs/ARCHITECTURE.md` for full flow.
+- Key path:
+  - syntax-aware chunking
+  - OpenAI embeddings (`text-embedding-3-small`)
+  - Qdrant semantic retrieval + keyword fallback
+  - answer generation + citations-only fallback
+  - SSE streaming endpoint (`POST /query/stream`)
 
-```bash
-export VOYAGE_API_KEY=...
-# or
-export OPENAI_API_KEY=...
-```
+## Query Examples (Required Scenarios)
+1. Main entry point: `Where is the main entry point?`
+2. CUSTOMER-RECORD modifiers: `Where is CUSTOMER-RECORD modified?`
+3. CALCULATE-INTEREST explanation: `Explain CALCULATE-INTEREST flow.`
+4. File I/O operations: `Where is file I/O handled?`
+5. MODULE-X dependencies: `What depends on MODULE-X?`
+6. Error handling patterns: `Show error handling patterns.`
 
-Optional:
+## Tech Stack
+- FastAPI
+- Qdrant
+- OpenAI embeddings (`text-embedding-3-small` by default)
+- OpenAI LLM answer generation
+- COBOL corpus under `data/` and `src/legacylens/sample_codebase/`
 
-```bash
-export QDRANT_URL=http://localhost:6333
-export QDRANT_COLLECTION=legacylens_chunks_dev
-export CODEBASE_PATH=/absolute/path/to/cobol/repo
-```
+## Deployment Link
+- `<DEPLOYED_URL>`
 
-If `QDRANT_URL` points to an unreachable host, `/query` will fail with `503` and a retrieval error cause.
-
-Use different collections per environment when sharing one Qdrant instance:
-- `legacylens_chunks_dev` for local/dev
-- `legacylens_chunks_prod` for production
-
-## Run Qdrant
-
-```bash
-docker run -p 6333:6333 qdrant/qdrant
-```
-
-## CLI
-
-```bash
-python -m legacylens ingest --codebase /path/to/cobol
-python -m legacylens query "where is file IO handled?" --codebase /path/to/cobol
-python -m legacylens callers READ-FILE --codebase /path/to/cobol
-python -m legacylens eval --dataset eval/ground_truth.jsonl --codebase /path/to/cobol --k 5 --out eval/results.jsonl
-```
-
-## API
-
-```bash
-uvicorn legacylens.api:app --reload
-```
-
-Then:
-
-```bash
-open http://127.0.0.1:8000/
-
-curl -X POST http://127.0.0.1:8000/query \
-  -H "content-type: application/json" \
-  -d '{"query":"what paragraphs call LIBCALC?","codebase_path":"/path/to/cobol"}'
-
-curl http://127.0.0.1:8000/callers/READ-FILE?codebase_path=/path/to/cobol
-```
-
-## Evaluation Dataset Format
-
-Each line in the JSONL dataset should be:
-
-```json
-{"query":"where is file I/O handled?","relevant_files":["tests/testsuite.src/numeric-dump.cob"]}
-```
-
-or with exact citations:
-
-```json
-{"query":"where is STOP RUN used?","relevant_citations":["[tests/testsuite.src/numeric-dump.cob:455-455]"]}
-```
-
-## Web Console UI
-
-The LegacyLens console provides visual parity with the CLI for interactive demos and live exploration:
-
-- Dataset strip: Horizontal selector for indexed codebases with current dataset label
-- KPI chips: Top-level metrics (Retrieved, Latency, Top Score, Files) updated per-query
-- Source cards: Expandable code snippets with score bars, citation tags, Copy button
-- Dependency graph: Cytoscape-powered caller/callee visualization with legend (PERFORM/CALL/Unknown) and node/edge counters
-- Analytics panel: Five charts (Similarity Distribution, Division Breakdown, Chunk Type Mix, Hit Distribution, Score Bands)
-- Query log: Session history with timestamps (max 50 entries, newest first)
-
-Keyboard shortcuts:
-- `/` focus query input
-- `Enter` run query
-
-## Tests
+## Testing
 
 ```bash
 pytest -q
+python scripts/validate_corpus.py --codebase data
+python scripts/validate_traceability.py
 ```

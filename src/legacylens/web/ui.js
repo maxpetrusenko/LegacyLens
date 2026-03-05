@@ -5,8 +5,20 @@ function byId(id) {
 export const el = {
   status: byId("status-badge"),
   answer: byId("answer-text"),
+  answerStructuredMeta: byId("answer-structured-meta"),
+  answerModelMeta: byId("answer-model-meta"),
+  answerId: byId("answer-id"),
+  copyAnswerId: byId("copy-answer-id"),
   queryError: byId("query-error"),
+  generating: byId("generating-indicator"),
+  fallbackBanner: byId("fallback-banner"),
+  fallbackText: byId("fallback-text"),
+  fallbackDismiss: byId("fallback-dismiss"),
+  lowConfidence: byId("low-confidence"),
+  lowConfidenceList: byId("low-confidence-list"),
+  lowConfidenceRetry: byId("low-confidence-retry"),
   sourcesList: byId("sources-list"),
+  sourcesTitle: byId("sources-title"),
   sourcesEmpty: byId("sources-empty"),
   graphEmpty: byId("graph-empty"),
   callersList: byId("callers-list"),
@@ -67,19 +79,100 @@ export function setStatus(label) {
   el.status.textContent = label;
 }
 
-export function setQueryLoading() {
+export function setGenerating(active) {
+  if (!el.generating) return;
+  el.generating.style.display = active ? "inline-flex" : "none";
+}
+
+function _formatPercent(score, digits = 1) {
+  return `${(Number(score || 0) * 100).toFixed(digits)}%`;
+}
+
+function _uniqueDivisions(sources = []) {
+  return Array.from(new Set((sources || []).map((source) => source.division).filter(Boolean)));
+}
+
+function _divisionSummary(sources = []) {
+  const divisions = _uniqueDivisions(sources);
+  if (!divisions.length) return "Unknown";
+  if (divisions.length <= 2) return divisions.join(", ");
+  return `${divisions.slice(0, 2).join(", ")} +${divisions.length - 2}`;
+}
+
+function _lineRange(source = {}) {
+  const start = source.line_start;
+  const end = source.line_end;
+  if (typeof start === "number" && typeof end === "number") {
+    return `L${start}-${end}`;
+  }
+  return "L?-?";
+}
+
+export function setQueryLoading(query = "", fusionEnabled = false) {
   setStatus("Searching");
   el.queryError.textContent = "";
   el.answer.textContent = "";
+  renderResponseLayout({
+    query,
+    answerId: "pending",
+    diagnostics: {},
+    sources: [],
+    queryMeta: {},
+    fusionEnabled,
+  });
+  renderLowConfidence(null);
   el.answer.classList.add("skeleton");
+  setGenerating(true);
 }
 
 export function clearQueryLoading() {
   el.answer.classList.remove("skeleton");
+  setGenerating(false);
 }
 
 export function renderAnswer(text) {
   el.answer.textContent = text || "No answer generated.";
+}
+
+export function renderResponseLayout({
+  query = "",
+  diagnostics = {},
+  sources = [],
+  queryMeta = {},
+  fusionEnabled = false,
+  answerId = "-",
+} = {}) {
+  if (el.answerStructuredMeta) {
+    const retrieved = Number(diagnostics.chunks_returned ?? sources.length ?? 0);
+    const latency = `${Number(diagnostics.latency_ms || 0)}ms`;
+    const topScore = _formatPercent(diagnostics.top1_score, 1);
+    const filesHit = new Set((sources || []).map((source) => source.file_path).filter(Boolean)).size;
+    const divisions = _divisionSummary(sources);
+    el.answerStructuredMeta.innerHTML = `
+      <p class="structured-query">${_escapeHtml(query || "No query submitted")}</p>
+      <div class="structured-row">
+        <span class="structured-label">Search</span>
+        <span class="structured-value">${fusionEnabled ? "Fusion ON" : "Fusion OFF"}</span>
+      </div>
+      <div class="structured-grid">
+        <div class="structured-cell"><span class="structured-label">Retrieved</span><strong>${retrieved} chunks</strong></div>
+        <div class="structured-cell"><span class="structured-label">Latency</span><strong>${latency}</strong></div>
+        <div class="structured-cell"><span class="structured-label">Top score</span><strong>${topScore}</strong></div>
+        <div class="structured-cell"><span class="structured-label">Files hit</span><strong>${filesHit}</strong></div>
+        <div class="structured-cell structured-cell-wide"><span class="structured-label">Divisions</span><strong>${_escapeHtml(divisions)}</strong></div>
+      </div>
+    `;
+  }
+  if (el.answerModelMeta) {
+    const model = queryMeta.llm_model || "Model unavailable";
+    el.answerModelMeta.textContent = model;
+  }
+  if (el.answerId) {
+    el.answerId.textContent = answerId || "-";
+  }
+  if (el.sourcesTitle) {
+    el.sourcesTitle.textContent = `Source Code (${Number(sources.length || 0)} matches)`;
+  }
 }
 
 function _sourceKey(source) {
@@ -90,16 +183,6 @@ function _sourceKey(source) {
     return source.citation;
   }
   return `${source.text || ""}`.slice(0, 120);
-}
-
-function _renderScoreBar(score) {
-  const pct = Math.round(Number(score || 0) * 100);
-  return `
-    <div class="score-bar-wrap">
-      <div class="score-bar-fill" style="width: ${pct}%"></div>
-      <span class="score-label">${pct}%</span>
-    </div>
-  `;
 }
 
 function _renderTags(source) {
@@ -116,16 +199,20 @@ function _renderTags(source) {
 }
 
 function _renderSourceHeader(source, key, isExpanded) {
-  const citation = source.citation || `${source.file_path || "unknown"}:${source.line_start || 1}-${source.line_end || 1}`;
+  const filePath = source.file_path || source.citation || "unknown";
+  const lineRange = _lineRange(source);
+  const score = _formatPercent(source.score, 1);
+  const division = source.division || "Unknown";
   const tagsMarkup = _renderTags(source);
   return `
     <div class="source-header">
       <div class="source-meta">
-        <span class="source-path">${_escapeHtml(citation)}</span>
+        <span class="source-path">${_escapeHtml(filePath)}</span>
+        <span class="source-context">${_escapeHtml(lineRange)} · ${_escapeHtml(division)}</span>
         ${tagsMarkup ? `<div class="source-tags">${tagsMarkup}</div>` : ""}
       </div>
       <div class="source-actions">
-        ${_renderScoreBar(source.score)}
+        <span class="source-score">${score}</span>
         <button class="source-action-btn expand-btn" data-key="${key}">
           ${isExpanded ? "Collapse" : "Expand"}
         </button>
@@ -179,6 +266,9 @@ function _attachSourceListeners(li) {
 
 export function renderSources(sources = []) {
   el.sourcesList.innerHTML = "";
+  if (el.sourcesTitle) {
+    el.sourcesTitle.textContent = `Source Code (${Number(sources.length || 0)} matches)`;
+  }
   if (!sources.length) {
     el.sourcesEmpty.style.display = "block";
     return;
@@ -210,12 +300,82 @@ export function renderSources(sources = []) {
 
 export function renderDiagnostics(d = {}) {
   el.statLatency.textContent = `${Number(d.latency_ms || 0)} ms`;
-  el.statTop1.textContent = Number(d.top1_score || 0).toFixed(4);
+  el.statTop1.textContent = _formatPercent(d.top1_score, 1);
   el.statHybrid.textContent = d.hybrid_triggered ? "Yes" : "No";
   el.statHits.textContent = `${Number(d.semantic_hits || 0)}/${Number(d.fallback_hits || 0)}`;
 }
 
+function _fallbackMessage(fallback) {
+  const reason = fallback?.reason || "unknown";
+  if (fallback?.mode === "keyword") {
+    return `Keyword fallback active (${reason}). Results may be less semantically precise.`;
+  }
+  if (fallback?.mode === "citations_only") {
+    return `Citations-only fallback active (${reason}). No synthesized prose returned.`;
+  }
+  return `Fallback active (${reason}).`;
+}
+
+export function renderFallback(fallback) {
+  if (!el.fallbackBanner || !el.fallbackText) return;
+  if (!fallback?.active) {
+    el.fallbackBanner.style.display = "none";
+    el.fallbackText.textContent = "";
+    return;
+  }
+  el.fallbackBanner.classList.remove("is-info", "is-error");
+  el.fallbackBanner.classList.add(fallback.severity === "error" ? "is-error" : "is-info");
+  el.fallbackText.textContent = _fallbackMessage(fallback);
+  el.fallbackBanner.style.display = "flex";
+}
+
+if (el.fallbackDismiss) {
+  el.fallbackDismiss.addEventListener("click", () => {
+    if (el.fallbackBanner) {
+      el.fallbackBanner.style.display = "none";
+    }
+  });
+}
+
+if (el.copyAnswerId) {
+  el.copyAnswerId.addEventListener("click", async () => {
+    const value = el.answerId?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(value);
+      el.copyAnswerId.textContent = "Copied";
+      setTimeout(() => {
+        if (el.copyAnswerId) {
+          el.copyAnswerId.textContent = "Copy ID";
+        }
+      }, 1200);
+    } catch {}
+  });
+}
+
+export function renderLowConfidence(detail) {
+  if (!el.lowConfidence || !el.lowConfidenceList) return;
+  if (!detail || !Array.isArray(detail.suggestions) || !detail.suggestions.length) {
+    el.lowConfidence.style.display = "none";
+    el.lowConfidenceList.innerHTML = "";
+    return;
+  }
+  el.lowConfidenceList.innerHTML = detail.suggestions
+    .map((item) => `<li>${_escapeHtml(String(item))}</li>`)
+    .join("");
+  el.lowConfidence.style.display = "block";
+}
+
+if (el.lowConfidenceRetry) {
+  el.lowConfidenceRetry.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("legacylens:retry-relaxed"));
+  });
+}
+
 export function renderQueryError(error) {
+  if (error && typeof error === "object" && error.message) {
+    el.queryError.textContent = String(error.message);
+    return;
+  }
   el.queryError.textContent = String(error);
 }
 
@@ -256,26 +416,55 @@ export function renderQueryLog(containerId = "log-entries") {
   for (const entry of _queryLog) {
     const li = document.createElement("li");
     li.className = "query-log-item";
-    const stats = typeof entry.topScore === "number" ? ` • top ${(entry.topScore * 100).toFixed(1)}%` : "";
+    const stats = typeof entry.topScore === "number" ? `Top ${(entry.topScore * 100).toFixed(1)}%` : "Top -";
+    const summary = entry.summary || "No summary captured.";
+    const evidence = entry.evidence || "No line evidence captured.";
+    const answerId = entry.answerId || "-";
+    const answerIdAttr = String(answerId).replace(/"/g, "&quot;");
     li.innerHTML = `
-      <span class="query-log-q">${_escapeHtml(entry.query)}${_escapeHtml(stats)}</span>
-      <span class="query-log-time">${new Date(entry.ts).toLocaleTimeString()}</span>
+      <div class="query-log-main">
+        <span class="query-log-q">${_escapeHtml(entry.query)}</span>
+        <span class="query-log-time">${new Date(entry.ts).toLocaleTimeString()}</span>
+      </div>
+      <div class="query-log-meta">
+        <code class="query-log-id">${_escapeHtml(answerId)}</code>
+        <button type="button" class="source-action-btn query-log-copy" data-answer-id="${answerIdAttr}">Copy ID</button>
+        <span class="query-log-top">${_escapeHtml(stats)}</span>
+      </div>
+      <p class="query-log-summary">${_escapeHtml(summary)}</p>
+      <p class="query-log-lines">${_escapeHtml(evidence)}</p>
     `;
     container.appendChild(li);
   }
+  const copyButtons = container.querySelectorAll(".query-log-copy");
+  for (const button of copyButtons) {
+    button.addEventListener("click", async () => {
+      const value = button.getAttribute("data-answer-id") || "";
+      try {
+        await navigator.clipboard.writeText(value);
+        button.textContent = "Copied";
+        setTimeout(() => {
+          button.textContent = "Copy ID";
+        }, 1200);
+      } catch {}
+    });
+  }
 }
 
-export function renderKpiChips(diagnostics = {}, sources = [], containerId = "kpi-chips") {
+export function renderKpiChips(diagnostics = {}, sources = [], options = {}) {
+  const { containerId = "kpi-chips", fusionEnabled = false } = options;
   const container = byId(containerId);
   if (!container) return;
-  const divisionCount = new Set((sources || []).map((source) => source.division).filter(Boolean)).size;
+  const retrieved = Number(diagnostics.chunks_returned ?? sources.length ?? 0);
+  const filesHit = new Set((sources || []).map((source) => source.file_path).filter(Boolean)).size;
 
   const chips = [
-    { label: "Retrieved", value: String(diagnostics.chunks_returned ?? sources.length) },
+    { label: "Search", value: fusionEnabled ? "Fusion ON" : "Fusion OFF" },
+    { label: "Retrieved", value: `${retrieved} chunks` },
     { label: "Latency", value: `${Number(diagnostics.latency_ms || 0)}ms` },
-    { label: "Top Score", value: Number(diagnostics.top1_score || 0).toFixed(3) },
-    { label: "Files", value: String(new Set(sources.map(s => s.file_path)).size) },
-    { label: "Divisions", value: String(divisionCount || 0) },
+    { label: "Top score", value: _formatPercent(diagnostics.top1_score, 1) },
+    { label: "Files hit", value: String(filesHit) },
+    { label: "Divisions", value: _divisionSummary(sources) },
   ];
 
   container.innerHTML = chips

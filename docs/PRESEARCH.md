@@ -33,8 +33,8 @@ Fallback: OpenAI `text-embedding-3-small`.
 MVP-safe fallback: local deterministic hash embeddings when API keys are unavailable.
 
 ### Chunking: COBOL Structural Boundaries
-Primary chunk unit: PARAGRAPH within **PROCEDURE DIVISION** only.
 
+**COBOL:** PARAGRAPH within **PROCEDURE DIVISION** only.
 Paragraph detection rules:
 1. Line ends with `.`
 2. Label has 1-4 tokens, uppercase/hyphen pattern
@@ -52,6 +52,7 @@ Metadata per chunk:
 - `symbols_used`, `tags`, `language`
 
 Deterministic tags:
+**COBOL:**
 - `io`: `OPEN|READ|WRITE|CLOSE|SELECT|FD`
 - `error_handling`: `ON ERROR|INVALID KEY|AT END|NOT AT END|EXCEPTION`
 - `entry_candidate`: first PROCEDURE section or chunk containing `STOP RUN`
@@ -153,4 +154,3 @@ LLM-assisted:
 - React frontend polish
 - Advanced threshold calibration beyond first pass
 - Streaming responses
-
