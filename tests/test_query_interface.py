@@ -88,3 +88,10 @@ def test_meta_strip_does_not_hardcode_vector_counts() -> None:
     assert "Dims: 1536" not in ui_js
     assert "Metric: cosine" not in ui_js
     assert "text-embedding-3-small" not in ui_js
+
+
+def test_query_log_persistence_hooks_present() -> None:
+    app_js = _app_js()
+    assert "legacylens-query-log" in app_js
+    assert "_hydrateQueryLog();" in app_js
+    assert "_persistQueryLog();" in app_js

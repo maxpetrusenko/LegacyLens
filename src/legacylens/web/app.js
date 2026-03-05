@@ -1,10 +1,11 @@
-import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js?v=20260305f";
-import { initCharts, updateCharts } from "./charts.js?v=20260305f";
-import { clearGraph, renderGraph, getGraphStats } from "./graph.js?v=20260305f";
+import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js?v=20260305g";
+import { initCharts, updateCharts } from "./charts.js?v=20260305g";
+import { clearGraph, renderGraph, getGraphStats } from "./graph.js?v=20260305g";
 import {
   addToQueryLog,
   clearQueryLog,
   clearQueryLoading,
+  getQueryLog,
   renderAnswer,
   renderCallers,
   renderDiagnostics,
@@ -22,7 +23,7 @@ import {
   setQueryLoading,
   toggleMetaDetails,
   updateSessionStats,
-} from "./ui.js?v=20260305f";
+} from "./ui.js?v=20260305g";
 
 const queryForm = document.getElementById("query-form");
 const queryInput = document.getElementById("query-input");
@@ -38,6 +39,8 @@ let graphLibReady = false;
 const fusionEnabled = false;
 let theme = "light";
 let lastSources = [];
+const QUERY_LOG_STORAGE_KEY = "legacylens-query-log";
+const QUERY_LOG_LIMIT = 50;
 
 const session = {
   queryCount: 0,
@@ -90,6 +93,54 @@ function _recordQuery({ diagnostics = {}, sources = [], answer = "", answerId = 
     evidence: _evidenceForLog(sources),
   });
   renderQueryLog();
+  _persistQueryLog();
+}
+
+function _normalizeStoredQueryLogEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const query = String(entry.query || "").trim();
+  if (!query) return null;
+  const ts = Number(entry.ts || Date.now());
+  const topScore = Number(entry.topScore);
+  return {
+    query,
+    ts: Number.isFinite(ts) ? ts : Date.now(),
+    topScore: Number.isFinite(topScore) ? topScore : 0,
+    answerId: String(entry.answerId || "-"),
+    summary: String(entry.summary || "No summary captured."),
+    evidence: String(entry.evidence || "No line evidence captured."),
+  };
+}
+
+function _persistQueryLog() {
+  try {
+    window.localStorage.setItem(QUERY_LOG_STORAGE_KEY, JSON.stringify(getQueryLog()));
+  } catch (_error) {
+    // Ignore storage failures (private mode / blocked storage).
+  }
+}
+
+function _hydrateQueryLog() {
+  let raw = "";
+  try {
+    raw = window.localStorage.getItem(QUERY_LOG_STORAGE_KEY) || "";
+  } catch (_error) {
+    raw = "";
+  }
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    clearQueryLog();
+    for (const item of parsed.slice(0, QUERY_LOG_LIMIT)) {
+      const normalized = _normalizeStoredQueryLogEntry(item);
+      if (normalized) {
+        addToQueryLog(normalized);
+      }
+    }
+  } catch (_error) {
+    // Ignore malformed stored data.
+  }
 }
 
 function loadScript(src) {
@@ -387,6 +438,7 @@ if (clearLogBtn) {
   clearLogBtn.addEventListener("click", () => {
     clearQueryLog();
     renderQueryLog();
+    _persistQueryLog();
   });
 }
 
@@ -423,6 +475,7 @@ window.addEventListener("legacylens:retry-relaxed", async () => {
 
 setStatus("Ready");
 setGraphEmpty(true, "Lookup a symbol to render graph topology.");
+_hydrateQueryLog();
 renderQueryLog();
 renderGraphLegend();
 hydrateMeta();
