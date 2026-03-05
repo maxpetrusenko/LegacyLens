@@ -36,3 +36,8 @@ export async function getGraph(symbol) {
   const res = await fetch(`/graph/${encodeURIComponent(symbol)}`);
   return _parseResponse(res);
 }
+
+export async function getMeta() {
+  const res = await fetch("/meta");
+  return _parseResponse(res);
+}

@@ -8,9 +8,9 @@ const THEME = {
   accent: "#3fd2ff",
   accent2: "#44f2c8",
   muted: "#2a3f67",
-  text: "#bdd1f2",
-  grid: "rgba(120,150,196,0.15)",
-  tick: "#9fb6db",
+  text: "#2f4a68",
+  grid: "rgba(108, 138, 178, 0.24)",
+  tick: "#4f6b8c",
 };
 
 const PIE_COLORS = ["#44f2c8", "#3fd2ff", "#6b9fff", "#f2a87b", "#ff7aa2", "#4f77b0"];
@@ -31,7 +31,10 @@ function baseOptions() {
 
 function safeGet(id) {
   const el = typeof document === "undefined" ? null : document.getElementById(id);
-  return el && typeof window.Chart !== "undefined" ? el : null;
+  if (!el || typeof window.Chart === "undefined") {
+    return null;
+  }
+  return el.tagName === "CANVAS" ? el : null;
 }
 
 function createBarChart(ctx, label, data, colors) {
@@ -203,6 +206,32 @@ function updateChunkTypeChart(sources = []) {
   chunkTypeChart.update();
 }
 
+function updateFilesCoverage(sources = []) {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const fill = document.getElementById("files-coverage-fill");
+  const text = document.getElementById("files-coverage-text");
+  if (!fill || !text) {
+    return;
+  }
+
+  const uniqueFiles = new Set(sources.map((source) => source.file_path).filter(Boolean));
+  const totalLines = sources.reduce((sum, source) => {
+    const start = Number(source.line_start || 0);
+    const end = Number(source.line_end || start);
+    if (!start || !end || end < start) {
+      return sum;
+    }
+    return sum + (end - start + 1);
+  }, 0);
+  const percentage = sources.length ? Math.round((uniqueFiles.size / sources.length) * 100) : 0;
+  fill.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
+  text.textContent = uniqueFiles.size
+    ? `Files hit: ${uniqueFiles.size} | Total lines covered: ${totalLines}`
+    : "No files retrieved yet.";
+}
+
 export function updateCharts(diagnostics = {}, sources = null) {
   if (hitsChart) {
     const semantic = Number(diagnostics.semantic_hits || 0);
@@ -229,4 +258,5 @@ export function updateCharts(diagnostics = {}, sources = null) {
   updateSimilarityChart(sourceList);
   updateDivisionChart(sourceList);
   updateChunkTypeChart(sourceList);
+  updateFilesCoverage(sourceList);
 }

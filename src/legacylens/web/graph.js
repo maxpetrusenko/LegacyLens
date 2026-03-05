@@ -35,10 +35,10 @@ function buildStyles() {
       style: {
         "background-color": "#3fd2ff",
         label: "data(label)",
-        color: "#d6e6ff",
+        color: "#173657",
         "font-size": 10,
-        "text-outline-color": "#0a1830",
-        "text-outline-width": 2,
+        "text-outline-color": "#ffffff",
+        "text-outline-width": 1.5,
         width: 24,
         height: 24,
       },

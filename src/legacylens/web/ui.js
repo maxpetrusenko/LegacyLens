@@ -16,6 +16,21 @@ export const el = {
   statHits: byId("stat-hits"),
   graphStats: byId("graph-stats"),
   graphLegend: byId("graph-legend"),
+  kpiChips: byId("kpi-chips"),
+  sessionStats: byId("session-stats"),
+  logEntries: byId("log-entries"),
+  clearLogBtn: byId("clear-log-btn"),
+  fusionToggle: byId("fusion-toggle"),
+  metaToggle: byId("meta-toggle"),
+  metaDetails: byId("meta-details"),
+  metaDataset: byId("meta-dataset"),
+  metaVectors: byId("meta-vectors"),
+  metaDims: byId("meta-dims"),
+  metaMetric: byId("meta-metric"),
+  metaModel: byId("meta-model"),
+  metaLlm: byId("meta-llm"),
+  metaEmbedProvider: byId("meta-embed-provider"),
+  metaCollection: byId("meta-collection"),
 };
 
 const _expandState = new Map();
@@ -42,6 +57,10 @@ export function getQueryLog() {
 export function addToQueryLog(entry) {
   _queryLog.unshift(entry);
   if (_queryLog.length > 50) _queryLog.pop();
+}
+
+export function clearQueryLog() {
+  _queryLog.splice(0, _queryLog.length);
 }
 
 export function setStatus(label) {
@@ -89,10 +108,11 @@ function _renderTags(source) {
   if (source.section) tags.push(source.section);
   if (source.symbol_name) tags.push(source.symbol_name);
   if (Array.isArray(source.tags)) tags.push(...source.tags.slice(0, 2));
-  if (!tags.length) {
+  const uniqueTags = Array.from(new Set(tags.map((tag) => String(tag).trim()).filter(Boolean)));
+  if (!uniqueTags.length) {
     return "";
   }
-  return tags.map((t) => `<span class="source-tag">${_escapeHtml(String(t))}</span>`).join(" ");
+  return uniqueTags.map((t) => `<span class="source-tag">${_escapeHtml(t)}</span>`).join(" ");
 }
 
 function _renderSourceHeader(source, key, isExpanded) {
@@ -214,8 +234,15 @@ export function renderCallers(callers = []) {
   }
 }
 
-export function setGraphEmpty(isEmpty) {
-  el.graphEmpty.style.display = isEmpty ? "block" : "none";
+export function setGraphEmpty(isEmpty, message = null) {
+  if (el.graphEmpty) {
+    if (message) {
+      el.graphEmpty.textContent = message;
+    } else if (!el.graphEmpty.textContent.trim()) {
+      el.graphEmpty.textContent = "Lookup a symbol to render graph topology.";
+    }
+    el.graphEmpty.style.display = isEmpty ? "block" : "none";
+  }
 }
 
 export function renderQueryLog(containerId = "log-entries") {
@@ -229,8 +256,9 @@ export function renderQueryLog(containerId = "log-entries") {
   for (const entry of _queryLog) {
     const li = document.createElement("li");
     li.className = "query-log-item";
+    const stats = typeof entry.topScore === "number" ? ` • top ${(entry.topScore * 100).toFixed(1)}%` : "";
     li.innerHTML = `
-      <span class="query-log-q">${_escapeHtml(entry.query)}</span>
+      <span class="query-log-q">${_escapeHtml(entry.query)}${_escapeHtml(stats)}</span>
       <span class="query-log-time">${new Date(entry.ts).toLocaleTimeString()}</span>
     `;
     container.appendChild(li);
@@ -240,12 +268,14 @@ export function renderQueryLog(containerId = "log-entries") {
 export function renderKpiChips(diagnostics = {}, sources = [], containerId = "kpi-chips") {
   const container = byId(containerId);
   if (!container) return;
+  const divisionCount = new Set((sources || []).map((source) => source.division).filter(Boolean)).size;
 
   const chips = [
     { label: "Retrieved", value: String(diagnostics.chunks_returned ?? sources.length) },
     { label: "Latency", value: `${Number(diagnostics.latency_ms || 0)}ms` },
     { label: "Top Score", value: Number(diagnostics.top1_score || 0).toFixed(3) },
     { label: "Files", value: String(new Set(sources.map(s => s.file_path)).size) },
+    { label: "Divisions", value: String(divisionCount || 0) },
   ];
 
   container.innerHTML = chips
@@ -292,4 +322,50 @@ export function renderGraphLegend() {
       <span>Unknown</span>
     </div>
   `;
+}
+
+export function renderMetaStrip(meta = {}, queryMeta = {}) {
+  if (el.metaDataset) {
+    const dataset = meta.default_codebase ? String(meta.default_codebase).split("/").pop() : "cobol-academy";
+    el.metaDataset.textContent = dataset || "cobol-academy";
+  }
+  if (el.metaVectors) {
+    el.metaVectors.textContent = "Vectors: 60";
+  }
+  if (el.metaDims) {
+    el.metaDims.textContent = "Dims: 1536";
+  }
+  if (el.metaMetric) {
+    el.metaMetric.textContent = "Metric: cosine";
+  }
+  if (el.metaModel) {
+    const model = queryMeta.embed_model || "text-embedding-3-small";
+    el.metaModel.textContent = `Model: ${model}`;
+  }
+  if (el.metaLlm) {
+    el.metaLlm.textContent = `LLM: ${queryMeta.llm_model || "-"}`;
+  }
+  if (el.metaEmbedProvider) {
+    el.metaEmbedProvider.textContent = `Embed: ${queryMeta.embed_provider || "-"}`;
+  }
+  if (el.metaCollection) {
+    el.metaCollection.textContent = `Collection: ${queryMeta.qdrant_collection || "-"}`;
+  }
+}
+
+export function setFusionEnabled(enabled) {
+  if (!el.fusionToggle) return;
+  el.fusionToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  el.fusionToggle.classList.toggle("is-on", enabled);
+  el.fusionToggle.textContent = enabled ? "Fusion ON" : "Fusion OFF";
+}
+
+export function toggleMetaDetails() {
+  if (!el.metaToggle || !el.metaDetails) {
+    return;
+  }
+  const expanded = el.metaToggle.getAttribute("aria-expanded") === "true";
+  const next = !expanded;
+  el.metaToggle.setAttribute("aria-expanded", next ? "true" : "false");
+  el.metaDetails.classList.toggle("is-hidden", !next);
 }

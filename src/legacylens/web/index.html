@@ -18,7 +18,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
     />
-    <link rel="stylesheet" href="/assets/styles.css?v=20260304a" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260305c" />
   </head>
   <body>
     <div class="ambient" aria-hidden="true"></div>
@@ -26,7 +26,28 @@
       <header class="hero panel">
         <div class="hero-head">
           <p class="kicker">LegacyLens Academy</p>
-          <span id="status-badge" class="badge">Ready</span>
+          <div class="head-actions">
+            <button id="theme-toggle" type="button" class="theme-toggle">Light</button>
+            <span id="status-badge" class="badge">Ready</span>
+          </div>
+        </div>
+        <div class="live-row">
+          <span class="live-pill">LIVE <span class="dot"></span> Ask the COBOL Codebase</span>
+        </div>
+        <div id="meta-strip" class="meta-strip">
+          <div class="meta-items">
+            <span id="meta-dataset">cobol-academy</span>
+            <span id="meta-vectors">Vectors: -</span>
+            <span id="meta-dims">Dims: -</span>
+            <span id="meta-metric">Metric: cosine</span>
+            <span id="meta-model">Model: -</span>
+          </div>
+          <button id="meta-toggle" type="button" class="meta-toggle" aria-expanded="false">details</button>
+        </div>
+        <div id="meta-details" class="meta-details is-hidden">
+          <span id="meta-llm">LLM: -</span>
+          <span id="meta-embed-provider">Embed: -</span>
+          <span id="meta-collection">Collection: -</span>
         </div>
         <h1>COBOL Query Console</h1>
         <p class="subtitle">Ask questions, inspect evidence, and map call dependencies in one workflow.</p>
@@ -40,6 +61,10 @@
           />
           <button id="ask-btn" type="submit">Run Query</button>
         </form>
+        <div class="controls-row">
+          <button id="fusion-toggle" type="button" class="fusion-toggle" aria-pressed="false">Fusion OFF</button>
+          <div id="kpi-chips" class="kpi-chip-row" aria-label="Query KPI chips"></div>
+        </div>
         <div class="quick-row" role="list" aria-label="Quick prompts">
           <button type="button" class="chip" data-q="Where is file I/O handled?">I/O flow</button>
           <button type="button" class="chip" data-q="What calls DUMP?">DUMP callers</button>
@@ -106,6 +131,8 @@
           </form>
         </div>
         <div id="graph-view" class="graph-view" role="img" aria-label="Caller dependency graph"></div>
+        <div id="graph-stats" class="graph-stats"></div>
+        <div id="graph-legend" class="graph-legend"></div>
         <ul id="callers-list" class="callers-list"></ul>
         <p id="graph-empty" class="state empty">Lookup a symbol to render graph topology.</p>
       </section>
@@ -114,27 +141,45 @@
       <section id="analytics-panel" class="analytics-panel">
         <div class="panel-head">
           <h2>Query Analytics</h2>
+          <div id="session-stats" class="session-stats"></div>
         </div>
         <div class="analytics-grid">
           <article class="panel chart-card">
             <h3>Similarity Distribution</h3>
-            <div id="similarity-chart" class="chart-mount" aria-label="Similarity distribution chart"></div>
+            <div class="chart-frame">
+              <canvas id="similarity-chart" aria-label="Similarity distribution chart"></canvas>
+            </div>
           </article>
           <article class="panel chart-card">
             <h3>Division Breakdown</h3>
-            <div id="division-chart" class="chart-mount" aria-label="Division breakdown chart"></div>
+            <div class="chart-frame">
+              <canvas id="division-chart" aria-label="Division breakdown chart"></canvas>
+            </div>
           </article>
           <article class="panel chart-card">
             <h3>Chunk Type Mix</h3>
-            <div id="chunk-type-chart" class="chart-mount" aria-label="Chunk type mix chart"></div>
+            <div class="chart-frame">
+              <canvas id="chunk-type-chart" aria-label="Chunk type mix chart"></canvas>
+            </div>
           </article>
           <article class="panel chart-card">
             <h3>Hit Distribution</h3>
-            <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+            <div class="chart-frame">
+              <canvas id="hits-chart" aria-label="Hit distribution chart"></canvas>
+            </div>
           </article>
           <article class="panel chart-card">
             <h3>Score Bands</h3>
-            <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+            <div class="chart-frame">
+              <canvas id="score-chart" aria-label="Score bands chart"></canvas>
+            </div>
+          </article>
+          <article class="panel chart-card">
+            <h3>Files Retrieved</h3>
+            <div class="file-bar-wrap">
+              <div id="files-coverage-fill" class="file-bar-fill"></div>
+            </div>
+            <p id="files-coverage-text" class="file-bar-text">No files retrieved yet.</p>
           </article>
         </div>
       </section>
@@ -176,6 +221,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cobol.min.js"></script>
-    <script type="module" src="/assets/app.js?v=20260304a"></script>
+    <script type="module" src="/assets/app.js?v=20260305c"></script>
   </body>
 </html>
