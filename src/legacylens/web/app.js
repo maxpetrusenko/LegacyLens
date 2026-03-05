@@ -49,6 +49,24 @@ const session = {
   filesSeen: new Set(),
 };
 
+const NON_GRAPHABLE_SYMBOLS = new Set([
+  "END",
+  "GOBACK",
+  "STOP",
+  "STOP RUN",
+  "EXIT",
+  "EXIT PROGRAM",
+  "PROGRAM",
+]);
+
+function isGraphableSymbol(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) return false;
+  if (!/[A-Z]/.test(normalized)) return false;
+  if (normalized.startsWith("END-") || normalized.startsWith("END ")) return false;
+  return !NON_GRAPHABLE_SYMBOLS.has(normalized);
+}
+
 function _updateSessionStats() {
   const avgSimilarity = session.queryCount
     ? session.similaritySum / session.queryCount
@@ -326,7 +344,9 @@ function applyTheme(nextTheme) {
 }
 
 function inferGraphSymbol(query, sources = []) {
-  const fromSource = (sources || []).find((source) => source.symbol_name)?.symbol_name;
+  const fromSource = (sources || [])
+    .map((source) => source.symbol_name)
+    .find((symbol) => isGraphableSymbol(symbol));
   if (fromSource) {
     return String(fromSource).toUpperCase();
   }
@@ -335,11 +355,14 @@ function inferGraphSymbol(query, sources = []) {
     .map((source) => {
       const text = String(source?.text || "").toUpperCase();
       const dependencyMatch = text.match(/\b(?:PERFORM|CALL)\s+['"]?([A-Z0-9-]{2,})['"]?/);
-      if (dependencyMatch?.[1]) {
+      if (dependencyMatch?.[1] && isGraphableSymbol(dependencyMatch[1])) {
         return dependencyMatch[1];
       }
       const paragraphMatch = text.match(/^\s*([A-Z0-9][A-Z0-9-]{2,})\.\s*$/m);
-      return paragraphMatch?.[1] || null;
+      if (paragraphMatch?.[1] && isGraphableSymbol(paragraphMatch[1])) {
+        return paragraphMatch[1];
+      }
+      return null;
     })
     .find(Boolean);
   if (fromDependencyLine) {
@@ -347,7 +370,9 @@ function inferGraphSymbol(query, sources = []) {
   }
 
   const tokenMatches = String(query || "").toUpperCase().match(/[A-Z0-9_-]{3,}/g) || [];
-  const candidates = tokenMatches.filter((token) => token.includes("_") || token.includes("-"));
+  const candidates = tokenMatches.filter(
+    (token) => (token.includes("_") || token.includes("-")) && isGraphableSymbol(token),
+  );
   if (candidates.length) {
     return candidates[0];
   }

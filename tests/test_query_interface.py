@@ -80,6 +80,13 @@ def test_query_without_symbol_resets_graph_panel() -> None:
     assert "No symbol inferred from this query" in app_js
 
 
+def test_graph_symbol_inference_filters_non_graphable_symbols() -> None:
+    app_js = _app_js()
+    assert "isGraphableSymbol" in app_js
+    assert 'normalized.startsWith("END-")' in app_js
+    assert "NON_GRAPHABLE_SYMBOLS" in app_js
+
+
 def test_meta_strip_does_not_hardcode_vector_counts() -> None:
     ui_js = (Path(__file__).resolve().parents[1] / "src" / "legacylens" / "web" / "ui.js").read_text(
         encoding="utf-8"

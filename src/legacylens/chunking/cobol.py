@@ -24,6 +24,12 @@ RESERVED_KEYWORDS = {
     "PROCEDURE",
     "DIVISION",
     "SECTION",
+    "PROGRAM",
+    "END",
+    "GOBACK",
+    "EXIT",
+    "CONTINUE",
+    "ELSE",
 }
 
 IO_PATTERN = re.compile(r"\b(OPEN|READ|WRITE|CLOSE|SELECT|FD)\b", re.IGNORECASE)
@@ -40,6 +46,9 @@ def _is_valid_paragraph_label(label: str) -> bool:
     if not 1 <= len(tokens) <= 4:
         return False
     normalized = [token.upper() for token in tokens]
+    normalized_label = " ".join(normalized)
+    if normalized_label.startswith("END-") or normalized_label.startswith("END "):
+        return False
     if any(token in RESERVED_KEYWORDS for token in normalized):
         return False
     return all(re.fullmatch(r"[A-Z0-9-]+", token) is not None for token in normalized)

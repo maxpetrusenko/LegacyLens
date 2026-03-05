@@ -30,3 +30,20 @@ def test_uses_fallback_when_no_paragraphs() -> None:
 
     assert chunks
     assert all(chunk.symbol_type == "fallback" for chunk in chunks)
+
+
+def test_does_not_treat_end_or_goback_as_paragraph_labels() -> None:
+    source = """IDENTIFICATION DIVISION.
+PROGRAM-ID. SAMPLE.
+PROCEDURE DIVISION.
+    PERFORM X TIMES
+       DISPLAY "A"
+    END-PERFORM.
+    GOBACK.
+END PROGRAM SAMPLE.
+"""
+    chunks = chunk_cobol_file("sample.cob", source)
+
+    assert chunks
+    assert all(chunk.symbol_type == "fallback" for chunk in chunks)
+    assert all(chunk.symbol_name is None for chunk in chunks)
