@@ -72,3 +72,19 @@ def test_streaming_answer_does_not_seed_no_answer_placeholder() -> None:
     app_js = _app_js()
     assert 'renderAnswer("")' not in app_js
     assert "const finalAnswer = payload.answer || streamedAnswer;" in app_js
+
+
+def test_query_without_symbol_resets_graph_panel() -> None:
+    app_js = _app_js()
+    assert "clearGraph()" in app_js
+    assert "No symbol inferred from this query" in app_js
+
+
+def test_meta_strip_does_not_hardcode_vector_counts() -> None:
+    ui_js = (Path(__file__).resolve().parents[1] / "src" / "legacylens" / "web" / "ui.js").read_text(
+        encoding="utf-8"
+    )
+    assert "Vectors: 60" not in ui_js
+    assert "Dims: 1536" not in ui_js
+    assert "Metric: cosine" not in ui_js
+    assert "text-embedding-3-small" not in ui_js

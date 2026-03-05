@@ -1,6 +1,6 @@
-import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js";
-import { initCharts, updateCharts } from "./charts.js";
-import { renderGraph, getGraphStats } from "./graph.js";
+import { getCallers, getGraph, getMeta, queryCodebase, queryCodebaseStream } from "./api-client.js?v=20260305f";
+import { initCharts, updateCharts } from "./charts.js?v=20260305f";
+import { clearGraph, renderGraph, getGraphStats } from "./graph.js?v=20260305f";
 import {
   addToQueryLog,
   clearQueryLog,
@@ -13,18 +13,16 @@ import {
   renderResponseLayout,
   renderGraphLegend,
   renderGraphStats,
-  renderKpiChips,
   renderMetaStrip,
   renderQueryLog,
   renderQueryError,
   renderSources,
-  setFusionEnabled,
   setGraphEmpty,
   setStatus,
   setQueryLoading,
   toggleMetaDetails,
   updateSessionStats,
-} from "./ui.js";
+} from "./ui.js?v=20260305f";
 
 const queryForm = document.getElementById("query-form");
 const queryInput = document.getElementById("query-input");
@@ -32,13 +30,12 @@ const graphForm = document.getElementById("graph-form");
 const symbolInput = document.getElementById("symbol-input");
 const chips = document.querySelectorAll(".chip");
 const clearLogBtn = document.getElementById("clear-log-btn");
-const fusionToggle = document.getElementById("fusion-toggle");
 const metaToggle = document.getElementById("meta-toggle");
 const themeToggle = document.getElementById("theme-toggle");
 
 let chartLibReady = false;
 let graphLibReady = false;
-let fusionEnabled = false;
+const fusionEnabled = false;
 let theme = "light";
 let lastSources = [];
 
@@ -92,7 +89,6 @@ function _recordQuery({ diagnostics = {}, sources = [], answer = "", answerId = 
     summary: _summarizeAnswerForLog(answer),
     evidence: _evidenceForLog(sources),
   });
-  renderKpiChips(diagnostics, sources, { fusionEnabled });
   renderQueryLog();
 }
 
@@ -145,6 +141,42 @@ async function runQuery(query) {
   setQueryLoading(query, fusionEnabled);
   renderFallback({ active: false });
   try {
+    let renderedGraphSymbol = null;
+    const renderContext = async (payload) => {
+      const sources = payload.sources || [];
+      lastSources = sources;
+      renderResponseLayout({
+        query,
+        diagnostics: payload.diagnostics || {},
+        sources,
+        queryMeta: payload.query_meta || {},
+        fusionEnabled,
+        answerId: payload.answer_id || "-",
+      });
+      renderSources(sources);
+      renderDiagnostics(payload.diagnostics || {});
+      renderFallback(payload.fallback || { active: false });
+      renderMetaStrip({}, payload.query_meta || {});
+      updateCharts(payload.diagnostics || {}, sources);
+
+      const inferredSymbol = inferGraphSymbol(query, sources);
+      if (inferredSymbol) {
+        symbolInput.value = inferredSymbol;
+        if (renderedGraphSymbol !== inferredSymbol) {
+          renderedGraphSymbol = inferredSymbol;
+          await runGraphLookup(inferredSymbol, { allowFallback: true, silentStatus: true });
+        }
+      } else {
+        if (renderedGraphSymbol !== "") {
+          renderedGraphSymbol = "";
+          clearGraph();
+          renderCallers([]);
+          renderGraphStats({ nodeCount: 0, edgeCount: 0, edgesByRelation: {} });
+          setGraphEmpty(true, "No symbol inferred from this query. Enter one above to map dependencies.");
+        }
+      }
+    };
+
     let streamedAnswer = "";
     const answerEl = document.getElementById("answer-text");
     if (answerEl) {
@@ -159,6 +191,11 @@ async function runQuery(query) {
         streamedAnswer += token;
         renderAnswer(streamedAnswer);
       },
+      onContext: (payload) => {
+        renderContext(payload).catch(() => {
+          // Final payload path still renders if early context processing fails.
+        });
+      },
     }).catch(async (error) => {
       const fallbackPayload = await queryCodebase(query);
       renderAnswer(fallbackPayload.answer || "");
@@ -166,38 +203,20 @@ async function runQuery(query) {
     });
     await ensureChartLib();
     const finalAnswer = payload.answer || streamedAnswer;
-    renderResponseLayout({
-      query,
-      diagnostics: payload.diagnostics || {},
-      sources: payload.sources || [],
-      queryMeta: payload.query_meta || {},
-      fusionEnabled,
-      answerId: payload.answer_id || "-",
-    });
+    await renderContext(payload);
     if (finalAnswer) {
       renderAnswer(finalAnswer);
     } else {
       renderAnswer("No answer generated.");
     }
-    const sources = payload.sources || [];
-    lastSources = sources;
-    renderSources(sources);
-    renderDiagnostics(payload.diagnostics || {});
-    renderFallback(payload.fallback || { active: false });
     renderLowConfidence(null);
-    renderMetaStrip({}, payload.query_meta || {});
-    updateCharts(payload.diagnostics || {}, sources);
+    const sources = payload.sources || [];
     _recordQuery({
       diagnostics: payload.diagnostics || {},
       sources,
       answer: finalAnswer,
       answerId: payload.answer_id || "-",
     });
-    const inferredSymbol = inferGraphSymbol(query, sources);
-    if (inferredSymbol) {
-      symbolInput.value = inferredSymbol;
-      await runGraphLookup(inferredSymbol, { allowFallback: true, silentStatus: true });
-    }
     setStatus("Ready");
   } catch (error) {
     renderAnswer("Query failed.");
@@ -254,6 +273,21 @@ function inferGraphSymbol(query, sources = []) {
   const fromSource = (sources || []).find((source) => source.symbol_name)?.symbol_name;
   if (fromSource) {
     return String(fromSource).toUpperCase();
+  }
+
+  const fromDependencyLine = (sources || [])
+    .map((source) => {
+      const text = String(source?.text || "").toUpperCase();
+      const dependencyMatch = text.match(/\b(?:PERFORM|CALL)\s+['"]?([A-Z0-9-]{2,})['"]?/);
+      if (dependencyMatch?.[1]) {
+        return dependencyMatch[1];
+      }
+      const paragraphMatch = text.match(/^\s*([A-Z0-9][A-Z0-9-]{2,})\.\s*$/m);
+      return paragraphMatch?.[1] || null;
+    })
+    .find(Boolean);
+  if (fromDependencyLine) {
+    return fromDependencyLine;
   }
 
   const tokenMatches = String(query || "").toUpperCase().match(/[A-Z0-9_-]{3,}/g) || [];
@@ -322,6 +356,8 @@ async function runGraphLookup(symbol, options = {}) {
     }
   } catch (error) {
     renderCallers([`Lookup failed: ${String(error)}`]);
+    clearGraph();
+    renderGraphStats({ nodeCount: 0, edgeCount: 0, edgesByRelation: {} });
     setGraphEmpty(true, `Graph lookup failed for ${normalizedInput}.`);
     if (!options.silentStatus) {
       setStatus("Error");
@@ -351,14 +387,6 @@ if (clearLogBtn) {
   clearLogBtn.addEventListener("click", () => {
     clearQueryLog();
     renderQueryLog();
-  });
-}
-
-if (fusionToggle) {
-  setFusionEnabled(fusionEnabled);
-  fusionToggle.addEventListener("click", () => {
-    fusionEnabled = !fusionEnabled;
-    setFusionEnabled(fusionEnabled);
   });
 }
 

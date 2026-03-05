@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+import os
 
 from legacylens.answer import _openai_answer, _openai_stream_answer
 from legacylens.config import Settings
 from legacylens.embeddings import OpenAIEmbeddingProvider
+from legacylens.observability import observe_model_call
 
 
 class _FakeResponse:
@@ -53,6 +55,7 @@ def test_openai_embedding_provider_wraps_calls_with_observability(monkeypatch) -
     assert len(spans) == 1
     assert spans[0]["run_type"] == "embedding"
     assert spans[0]["provider"] == "openai"
+    assert spans[0]["inputs"]["input"] == ["MOVE A TO B."]
     assert spans[0]["outputs"]["vector_count"] == 1
 
 
@@ -89,6 +92,7 @@ def test_sync_llm_call_wraps_with_observability(monkeypatch) -> None:
     assert len(spans) == 1
     assert spans[0]["run_type"] == "llm"
     assert spans[0]["provider"] == "openai"
+    assert "Question: Where is main?" in spans[0]["inputs"]["prompt"]
     assert spans[0]["outputs"]["usage"]["total_tokens"] == 16
 
 
@@ -136,4 +140,50 @@ def test_streaming_llm_call_wraps_with_observability(monkeypatch) -> None:
     assert events[2]["type"] == "done"
     assert len(spans) == 1
     assert spans[0]["run_type"] == "llm"
+    assert spans[0]["inputs"]["stream"] is True
+    assert "Question: Where is main?" in spans[0]["inputs"]["prompt"]
+    assert spans[0]["outputs"]["answer"] == "Hello world"
     assert spans[0]["outputs"]["usage"]["total_tokens"] == 12
+
+
+def test_observe_model_call_enables_langsmith_tracing(monkeypatch) -> None:
+    tracing_calls: list[dict] = []
+    trace_calls: list[dict] = []
+
+    class _NoopCtx(AbstractContextManager):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    monkeypatch.setattr("legacylens.observability._langsmith_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        "legacylens.observability.tracing_context",
+        lambda **kwargs: tracing_calls.append(kwargs) or _NoopCtx(),
+    )
+    monkeypatch.setattr(
+        "legacylens.observability.trace",
+        lambda **kwargs: trace_calls.append(kwargs) or _NoopCtx(),
+    )
+    monkeypatch.setattr("legacylens.observability._LANGSMITH_TRACING_BOOTSTRAPPED", False)
+
+    os.environ.pop("LANGSMITH_TRACING", None)
+    os.environ.pop("LANGSMITH_TRACING_V2", None)
+    settings = Settings(langchain_api_key="test-key", observability_enabled=True)
+    with observe_model_call(
+        settings=settings,
+        name="llm.openai.chat_completion",
+        run_type="llm",
+        provider="openai",
+        model="gpt-4o-mini",
+        input_count=1,
+        inputs={"prompt": "x"},
+    ):
+        pass
+
+    assert os.environ["LANGSMITH_TRACING"] == "true"
+    assert os.environ["LANGSMITH_TRACING_V2"] == "true"
+    assert tracing_calls and tracing_calls[0]["enabled"] is True
+    assert trace_calls and trace_calls[0]["project_name"] == settings.observability_project
+    assert trace_calls[0]["inputs"]["prompt"] == "x"

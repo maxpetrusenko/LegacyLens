@@ -276,6 +276,52 @@ def test_query_sources_dedupe_repo_prefixed_paths(monkeypatch) -> None:
     assert payload["sources"][0]["file_path"] == "gnucobol/tests/testsuite.src/numeric-dump.cob"
 
 
+def test_query_sources_dedupe_absolute_repos_segment(monkeypatch) -> None:
+    def fake_retrieve_with_diagnostics(query, settings, codebase_path):
+        return RetrievalResult(
+            hits=[
+                RetrievalHit(
+                    file_path="/tmp/work/repos/gnucobol/tests/testsuite.src/tutorial.cob",
+                    line_start=116,
+                    line_end=149,
+                    text="perform read-all-records.",
+                    score=0.66,
+                    metadata={},
+                ),
+                RetrievalHit(
+                    file_path="gnucobol/tests/testsuite.src/tutorial.cob",
+                    line_start=116,
+                    line_end=149,
+                    text="perform read-all-records.",
+                    score=0.61,
+                    metadata={},
+                ),
+            ],
+            diagnostics=RetrievalDiagnostics(
+                latency_ms=101,
+                top1_score=0.66,
+                chunks_returned=2,
+                hybrid_triggered=False,
+                semantic_hits=2,
+                fallback_hits=0,
+                confidence_level="high",
+                query_intent="io",
+                query_entities=1,
+                rerank_applied=False,
+                retrieval_error=None,
+            ),
+        )
+
+    monkeypatch.setattr("legacylens.api.retrieve_with_diagnostics", fake_retrieve_with_diagnostics)
+    monkeypatch.setattr("legacylens.api.generate_answer", lambda *args, **kwargs: "test answer")
+
+    response = client.post("/query", json={"query": "Where is file I/O handled?"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["sources"]) == 1
+    assert payload["sources"][0]["file_path"] == "gnucobol/tests/testsuite.src/tutorial.cob"
+
+
 def test_graph_typed_edges_with_perform_and_call(tmp_path: Path, monkeypatch) -> None:
     """Test that graph returns typed edges (perform/call/unknown)."""
 

@@ -17,7 +17,8 @@ Optional:
 - `QDRANT_API_KEY`
 - `OPENAI_EMBED_MODEL` (`text-embedding-3-small` or `text-embedding-3-large`)
 - `QDRANT_TIMEOUT`, `SEMANTIC_TIMEOUT`, `EMBEDDING_TIMEOUT`, `LLM_TIMEOUT`
-- `LANGCHAIN_API_KEY` and `LANGCHAIN_ORG_ID` for LangSmith tracing
+- `LANGCHAIN_API_KEY` for LangSmith tracing
+- `LANGSMITH_WORKSPACE_ID` only if you must target a non-default workspace
 - `OBSERVABILITY_ENABLED` (default `true`) and `OBSERVABILITY_PROJECT` (default `LegacyLens`)
 
 ## Local Run

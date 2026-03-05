@@ -27,6 +27,16 @@ def test_dedupe_keeps_highest_score() -> None:
     assert deduped[0].score == 0.8
 
 
+def test_dedupe_normalizes_repo_prefixed_paths() -> None:
+    hits = [
+        RetrievalHit("repos/gnucobol/tests/testsuite.src/tutorial.cob", 150, 259, "a", 0.71, {}),
+        RetrievalHit("gnucobol/tests/testsuite.src/tutorial.cob", 150, 259, "b", 0.69, {}),
+    ]
+    deduped = dedupe_hits(hits)
+    assert len(deduped) == 1
+    assert deduped[0].score == 0.71
+
+
 def test_low_confidence_with_flat_scores() -> None:
     hits = [
         RetrievalHit("a.cob", 1, 1, "", 0.70, {}),

@@ -56,8 +56,10 @@ def test_query_stream_emits_tokens_and_done(monkeypatch) -> None:
     response = client.post("/query/stream", json={"query": "test"})
     assert response.status_code == 200
     events = _parse_sse_events(response.text)
-    assert events[0][0] == "token"
+    assert events[0][0] == "context"
+    assert '"sources":' in events[0][1]
     assert events[1][0] == "token"
+    assert events[2][0] == "token"
     assert events[-1][0] == "done"
     assert '"answer_id": "ans_' in events[-1][1]
     assert '"answer": "Hello world"' in events[-1][1]

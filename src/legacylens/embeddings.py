@@ -48,6 +48,10 @@ class LocalHashEmbeddingProvider:
             provider="local_hash",
             model=f"local-hash-{self.dimensions}",
             input_count=len(texts),
+            inputs={
+                "texts": texts,
+                "dimensions": self.dimensions,
+            },
             metadata={"input_chars": sum(len(text) for text in texts)},
         ) as span:
             vectors = [self._embed(text) for text in texts]
@@ -78,6 +82,10 @@ class VoyageEmbeddingProvider:
             provider="voyage",
             model=self.model,
             input_count=len(texts),
+            inputs={
+                "model": self.model,
+                "input": texts,
+            },
             metadata={"input_chars": sum(len(text) for text in texts)},
         ) as span:
             response = self._client.post(
@@ -115,6 +123,10 @@ class OpenAIEmbeddingProvider:
             provider="openai",
             model=self.model,
             input_count=len(texts),
+            inputs={
+                "model": self.model,
+                "input": texts,
+            },
             metadata={"input_chars": sum(len(text) for text in texts)},
         ) as span:
             response = self._client.post(

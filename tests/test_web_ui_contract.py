@@ -24,7 +24,6 @@ def test_web_shell_contains_screenshot_sections() -> None:
         "query-kpis",
         "analytics-panel",
         "query-log-list",
-        "answer-structured-meta",
         "sources-title",
     ]
 

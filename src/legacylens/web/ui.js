@@ -5,7 +5,6 @@ function byId(id) {
 export const el = {
   status: byId("status-badge"),
   answer: byId("answer-text"),
-  answerStructuredMeta: byId("answer-structured-meta"),
   answerModelMeta: byId("answer-model-meta"),
   answerId: byId("answer-id"),
   copyAnswerId: byId("copy-answer-id"),
@@ -135,34 +134,10 @@ export function renderAnswer(text) {
 }
 
 export function renderResponseLayout({
-  query = "",
-  diagnostics = {},
   sources = [],
   queryMeta = {},
-  fusionEnabled = false,
   answerId = "-",
 } = {}) {
-  if (el.answerStructuredMeta) {
-    const retrieved = Number(diagnostics.chunks_returned ?? sources.length ?? 0);
-    const latency = `${Number(diagnostics.latency_ms || 0)}ms`;
-    const topScore = _formatPercent(diagnostics.top1_score, 1);
-    const filesHit = new Set((sources || []).map((source) => source.file_path).filter(Boolean)).size;
-    const divisions = _divisionSummary(sources);
-    el.answerStructuredMeta.innerHTML = `
-      <p class="structured-query">${_escapeHtml(query || "No query submitted")}</p>
-      <div class="structured-row">
-        <span class="structured-label">Search</span>
-        <span class="structured-value">${fusionEnabled ? "Fusion ON" : "Fusion OFF"}</span>
-      </div>
-      <div class="structured-grid">
-        <div class="structured-cell"><span class="structured-label">Retrieved</span><strong>${retrieved} chunks</strong></div>
-        <div class="structured-cell"><span class="structured-label">Latency</span><strong>${latency}</strong></div>
-        <div class="structured-cell"><span class="structured-label">Top score</span><strong>${topScore}</strong></div>
-        <div class="structured-cell"><span class="structured-label">Files hit</span><strong>${filesHit}</strong></div>
-        <div class="structured-cell structured-cell-wide"><span class="structured-label">Divisions</span><strong>${_escapeHtml(divisions)}</strong></div>
-      </div>
-    `;
-  }
   if (el.answerModelMeta) {
     const model = queryMeta.llm_model || "Model unavailable";
     el.answerModelMeta.textContent = model;
@@ -204,11 +179,16 @@ function _renderSourceHeader(source, key, isExpanded) {
   const score = _formatPercent(source.score, 1);
   const division = source.division || "Unknown";
   const tagsMarkup = _renderTags(source);
+  const previewLine = String(source.text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean) || "No preview line available.";
   return `
     <div class="source-header">
       <div class="source-meta">
         <span class="source-path">${_escapeHtml(filePath)}</span>
         <span class="source-context">${_escapeHtml(lineRange)} · ${_escapeHtml(division)}</span>
+        <span class="source-preview">${_escapeHtml(previewLine)}</span>
         ${tagsMarkup ? `<div class="source-tags">${tagsMarkup}</div>` : ""}
       </div>
       <div class="source-actions">
@@ -251,6 +231,7 @@ function _attachSourceListeners(li) {
     const key = expandBtn.dataset.key;
     const isExpanded = toggleExpand(key);
     body.classList.toggle("is-collapsed", !isExpanded);
+    li.classList.toggle("is-collapsed", !isExpanded);
     expandBtn.textContent = isExpanded ? "Collapse" : "Expand";
   });
 
@@ -266,6 +247,9 @@ function _attachSourceListeners(li) {
 
 export function renderSources(sources = []) {
   el.sourcesList.innerHTML = "";
+  if (el.sourcesList) {
+    el.sourcesList.scrollTop = 0;
+  }
   if (el.sourcesTitle) {
     el.sourcesTitle.textContent = `Source Code (${Number(sources.length || 0)} matches)`;
   }
@@ -291,6 +275,7 @@ export function renderSources(sources = []) {
 
     const body = li.querySelector(".source-body");
     body.classList.toggle("is-collapsed", !isExpanded);
+    li.classList.toggle("is-collapsed", !isExpanded);
 
     _attachSourceListeners(li);
   }
@@ -455,7 +440,7 @@ export function renderKpiChips(diagnostics = {}, sources = [], options = {}) {
   const { containerId = "kpi-chips", fusionEnabled = false } = options;
   const container = byId(containerId);
   if (!container) return;
-  const retrieved = Number(diagnostics.chunks_returned ?? sources.length ?? 0);
+  const retrieved = Number(sources.length || 0);
   const filesHit = new Set((sources || []).map((source) => source.file_path).filter(Boolean)).size;
 
   const chips = [
@@ -515,30 +500,30 @@ export function renderGraphLegend() {
 
 export function renderMetaStrip(meta = {}, queryMeta = {}) {
   if (el.metaDataset) {
-    const dataset = meta.default_codebase ? String(meta.default_codebase).split("/").pop() : "cobol-academy";
-    el.metaDataset.textContent = dataset || "cobol-academy";
+    const dataset = meta.default_codebase ? String(meta.default_codebase).split("/").pop() : "-";
+    el.metaDataset.textContent = dataset || "-";
   }
   if (el.metaVectors) {
-    el.metaVectors.textContent = "Vectors: 60";
+    el.metaVectors.textContent = `Vectors: ${meta.vector_count ?? "-"}`;
   }
   if (el.metaDims) {
-    el.metaDims.textContent = "Dims: 1536";
+    el.metaDims.textContent = `Dims: ${meta.vector_dim ?? "-"}`;
   }
   if (el.metaMetric) {
-    el.metaMetric.textContent = "Metric: cosine";
+    el.metaMetric.textContent = `Metric: ${meta.vector_metric ?? "-"}`;
   }
   if (el.metaModel) {
-    const model = queryMeta.embed_model || "text-embedding-3-small";
+    const model = queryMeta.embed_model || meta.embed_model || "-";
     el.metaModel.textContent = `Model: ${model}`;
   }
   if (el.metaLlm) {
-    el.metaLlm.textContent = `LLM: ${queryMeta.llm_model || "-"}`;
+    el.metaLlm.textContent = `LLM: ${queryMeta.llm_model || meta.llm_model || "-"}`;
   }
   if (el.metaEmbedProvider) {
-    el.metaEmbedProvider.textContent = `Embed: ${queryMeta.embed_provider || "-"}`;
+    el.metaEmbedProvider.textContent = `Embed: ${queryMeta.embed_provider || meta.embed_provider || "-"}`;
   }
   if (el.metaCollection) {
-    el.metaCollection.textContent = `Collection: ${queryMeta.qdrant_collection || "-"}`;
+    el.metaCollection.textContent = `Collection: ${queryMeta.qdrant_collection || meta.qdrant_collection || "-"}`;
   }
 }
 

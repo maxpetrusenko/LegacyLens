@@ -19,7 +19,7 @@ from legacylens.dependency_graph import (
     find_symbol_neighborhood,
     load_callers_index,
 )
-from legacylens.retrieval import format_citation, retrieve_with_diagnostics
+from legacylens.retrieval import canonicalize_file_path, format_citation, retrieve_with_diagnostics
 from legacylens.vector_store import QdrantStore
 
 app = FastAPI(title="LegacyLens MVP")
@@ -130,15 +130,9 @@ def _query_meta(settings: Settings) -> QueryMeta:
 
 
 def _sources_from_hits(hits) -> list[SourceRef]:
-    def canonical_path(value: str) -> str:
-        normalized = str(value or "").replace("\\", "/").lstrip("./")
-        if normalized.startswith("repos/"):
-            normalized = normalized[len("repos/") :]
-        return normalized or value
-
     deduped: dict[tuple[str, int, int], SourceRef] = {}
     for hit in hits:
-        normalized_path = canonical_path(hit.file_path)
+        normalized_path = canonicalize_file_path(hit.file_path)
         key = (normalized_path, int(hit.line_start), int(hit.line_end))
         candidate = SourceRef(
             citation=format_citation(normalized_path, hit.line_start, hit.line_end),
@@ -178,6 +172,58 @@ def _llm_failure_reason(exc: Exception) -> str:
     return "llm_error"
 
 
+def _collection_meta(settings: Settings) -> dict[str, int | str | None]:
+    vector_count: int | None = None
+    vector_dim: int | None = None
+    vector_metric: str | None = None
+
+    try:
+        store = QdrantStore(settings)
+        info = store.client.get_collection(collection_name=settings.qdrant_collection)
+    except Exception:
+        return {
+            "vector_count": vector_count,
+            "vector_dim": vector_dim,
+            "vector_metric": vector_metric,
+        }
+
+    for attr in ("vectors_count", "points_count"):
+        value = getattr(info, attr, None)
+        if value is not None:
+            try:
+                vector_count = int(value)
+            except (TypeError, ValueError):
+                pass
+            if vector_count is not None:
+                break
+
+    config = getattr(info, "config", None)
+    params = getattr(config, "params", None)
+    vectors = getattr(params, "vectors", None)
+    candidate = None
+    if isinstance(vectors, dict) and vectors:
+        candidate = next(iter(vectors.values()))
+    elif vectors is not None:
+        candidate = vectors
+
+    if candidate is not None:
+        size = getattr(candidate, "size", None)
+        distance = getattr(candidate, "distance", None)
+        if size is not None:
+            try:
+                vector_dim = int(size)
+            except (TypeError, ValueError):
+                vector_dim = None
+        if distance is not None:
+            vector_metric = str(getattr(distance, "value", distance)).lower()
+
+    return {
+        "vector_count": vector_count,
+        "vector_dim": vector_dim,
+        "vector_metric": vector_metric,
+    }
+
+
 def _stream_event(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
 
@@ -198,8 +244,10 @@ def root() -> FileResponse:
 
 
 @app.get("/meta")
-def meta() -> dict[str, str]:
+def meta() -> dict[str, str | int | None]:
     default_codebase = _default_codebase_path(None)
+    settings = Settings(codebase_path=default_codebase)
+    collection_meta = _collection_meta(settings)
     return {
         "service": "LegacyLens API",
         "status": "ok",
@@ -210,7 +258,13 @@ def meta() -> dict[str, str]:
         "graph": "/graph/{symbol}",
         "default_codebase": default_codebase,
         "default_codebase_exists": str(Path(default_codebase).exists()).lower(),
+        "qdrant_collection": settings.qdrant_collection,
+        "qdrant_url": settings.qdrant_url,
+        "embed_provider": settings.embed_provider,
+        "embed_model": _query_meta(settings).embed_model,
+        "llm_model": settings.llm_model,
         "docs": "/docs",
+        **collection_meta,
     }
 
 
@@ -323,6 +377,17 @@ def query_codebase_stream(request: QueryRequest):
         emitted_tokens = False
         finish_reason = "stop"
         token_usage: dict[str, int] | None = None
+        yield _stream_event(
+            "context",
+            {
+                "answer_id": answer_id,
+                "sources": [source.model_dump() for source in sources],
+                "diagnostics": asdict(retrieval.diagnostics),
+                "confidence_label": retrieval.diagnostics.confidence_level,
+                "fallback": fallback.model_dump(),
+                "query_meta": query_meta.model_dump(),
+            },
+        )
 
         try:
             for event in stream_answer_tokens(

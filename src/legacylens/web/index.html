@@ -18,7 +18,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
     />
-    <link rel="stylesheet" href="/assets/styles.css?v=20260305c" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260305f" />
   </head>
   <body>
     <div class="ambient" aria-hidden="true"></div>
@@ -36,10 +36,10 @@
         </div>
         <div id="meta-strip" class="meta-strip">
           <div class="meta-items">
-            <span id="meta-dataset">cobol-academy</span>
+            <span id="meta-dataset">-</span>
             <span id="meta-vectors">Vectors: -</span>
             <span id="meta-dims">Dims: -</span>
-            <span id="meta-metric">Metric: cosine</span>
+            <span id="meta-metric">Metric: -</span>
             <span id="meta-model">Model: -</span>
           </div>
           <button id="meta-toggle" type="button" class="meta-toggle" aria-expanded="false">details</button>
@@ -61,10 +61,6 @@
           />
           <button id="ask-btn" type="submit">Run Query</button>
         </form>
-        <div class="controls-row">
-          <button id="fusion-toggle" type="button" class="fusion-toggle" aria-pressed="false">Fusion OFF</button>
-          <div id="kpi-chips" class="kpi-chip-row" aria-label="Query KPI chips"></div>
-        </div>
         <div id="fallback-banner" class="fallback-banner is-info" role="status" aria-live="polite" style="display: none">
           <span id="fallback-text"></span>
           <button id="fallback-dismiss" type="button" class="fallback-dismiss">Dismiss</button>
@@ -110,9 +106,6 @@
 
       <section class="results-grid">
         <article class="panel answer-panel">
-          <div id="answer-structured-meta" class="answer-structured-meta">
-            <p class="structured-query">Run a query to see structured response metadata.</p>
-          </div>
           <div class="panel-head">
             <div class="panel-head-stack">
               <h2>AI Explanation</h2>
@@ -241,6 +234,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cobol.min.js"></script>
-    <script type="module" src="/assets/app.js?v=20260305c"></script>
+    <script type="module" src="/assets/app.js?v=20260305f"></script>
   </body>
 </html>

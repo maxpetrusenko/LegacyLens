@@ -105,9 +105,26 @@ function getLayout(rootId) {
   };
 }
 
+export function clearGraph() {
+  if (cy) {
+    cy.destroy();
+    cy = null;
+  }
+  currentGraphData = null;
+  const container = document.getElementById("graph-view");
+  if (container) {
+    container.innerHTML = "";
+  }
+}
+
 export function renderGraph(graph) {
   const container = document.getElementById("graph-view");
   if (!container) {
+    return;
+  }
+
+  if (!graph || (!Array.isArray(graph.nodes) && !Array.isArray(graph.edges))) {
+    clearGraph();
     return;
   }
 

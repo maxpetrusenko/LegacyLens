@@ -60,7 +60,7 @@ export async function queryCodebase(query) {
 
 export async function queryCodebaseStream(
   query,
-  { onToken = () => {}, onDone = () => {}, onError = () => {} } = {},
+  { onToken = () => {}, onContext = () => {}, onDone = () => {}, onError = () => {} } = {},
 ) {
   const res = await fetch("/query/stream", {
     method: "POST",
@@ -90,6 +90,8 @@ export async function queryCodebaseStream(
     for (const event of parsed.events) {
       if (event.event === "token") {
         onToken(event.data);
+      } else if (event.event === "context") {
+        onContext(event.data);
       } else if (event.event === "done") {
         finalPayload = event.data;
         onDone(event.data);

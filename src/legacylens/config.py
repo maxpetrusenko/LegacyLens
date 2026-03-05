@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     target_min_loc: int = 10000
     langchain_api_key: str | None = None
     langchain_org_id: str | None = None
+    langsmith_workspace_id: str | None = None
     observability_enabled: bool = True
     observability_project: str = "LegacyLens"
 

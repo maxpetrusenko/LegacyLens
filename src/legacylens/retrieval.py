@@ -31,6 +31,18 @@ def format_citation(file_path: str, line_start: int, line_end: int) -> str:
     return f"[{file_path}:{line_start}-{line_end}]"
 
 
+def canonicalize_file_path(value: str) -> str:
+    normalized = str(value or "").replace("\\", "/").lstrip("./")
+    if normalized.startswith("repos/"):
+        normalized = normalized[len("repos/") :]
+    else:
+        repos_marker = "/repos/"
+        marker_idx = normalized.find(repos_marker)
+        if marker_idx >= 0:
+            normalized = normalized[marker_idx + len(repos_marker) :]
+    return normalized or str(value or "")
+
+
 def is_low_confidence(hits: list[RetrievalHit], tau: float, delta: float) -> bool:
     if not hits:
         return True
@@ -48,9 +60,9 @@ def classify_confidence(top1_score: float, low_threshold: float, medium_threshol
 
 
 def dedupe_hits(hits: list[RetrievalHit]) -> list[RetrievalHit]:
-    deduped: dict[tuple[str, int], RetrievalHit] = {}
+    deduped: dict[tuple[str, int, int], RetrievalHit] = {}
     for hit in hits:
-        key = (hit.file_path, hit.line_start)
+        key = (canonicalize_file_path(hit.file_path), int(hit.line_start), int(hit.line_end))
         current = deduped.get(key)
         if current is None or hit.score > current.score:
             deduped[key] = hit
@@ -358,9 +370,10 @@ def retrieve_with_diagnostics(
     final_hits: list[RetrievalHit] = []
     for hit in selected_hits[: settings.answer_k]:
         expanded = _expand_context(effective_codebase, hit, settings.context_expand_lines)
+        canonical_path = canonicalize_file_path(hit.file_path)
         final_hits.append(
             RetrievalHit(
-                file_path=hit.file_path,
+                file_path=canonical_path,
                 line_start=hit.line_start,
                 line_end=hit.line_end,
                 text=expanded,
@@ -400,6 +413,7 @@ def retrieve(query: str, settings: Settings, codebase_path: Path | None = None) 
 
 __all__ = [
     "format_citation",
+    "canonicalize_file_path",
     "is_low_confidence",
     "classify_confidence",
     "dedupe_hits",
