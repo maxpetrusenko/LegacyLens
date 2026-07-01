@@ -4,6 +4,10 @@ LegacyLens is a FastAPI RAG system for legacy COBOL codebases. It ingests COBOL 
 
 No public deployment URL is attached in this repo yet. The demo path below is local and reproducible.
 
+![LegacyLens archive workflow](docs/assets/legacy-lens-workflow-poster.png)
+
+[Watch the 8-second workflow video](docs/assets/legacy-lens-workflow.mp4)
+
 ![LegacyLens RAG flow](docs/assets/legacylens-rag-flow.svg)
 
 ## What It Proves
