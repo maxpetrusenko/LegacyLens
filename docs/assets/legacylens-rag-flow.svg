@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">LegacyLens citation-grounded COBOL RAG flow</title>
+  <desc id="desc">Architecture diagram showing ingestion, retrieval, citation-grounded answers, fallback states, dependency graph endpoints, and verification gates.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6f3ea"/>
+      <stop offset="0.45" stop-color="#e8f0ed"/>
+      <stop offset="1" stop-color="#dce8f3"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#18313d" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#28475a"/>
+    </marker>
+    <style>
+      .title { font: 700 42px Georgia, "Times New Roman", serif; fill: #132d38; }
+      .subtitle { font: 400 19px Georgia, "Times New Roman", serif; fill: #49606b; }
+      .label { font: 700 21px Georgia, "Times New Roman", serif; fill: #132d38; }
+      .small { font: 500 15px Verdana, sans-serif; fill: #3d5560; }
+      .tiny { font: 500 13px Verdana, sans-serif; fill: #516a75; }
+      .box { fill: #fffdf8; stroke: #9fb2aa; stroke-width: 2; rx: 10; filter: url(#shadow); }
+      .box2 { fill: #f9fbf7; stroke: #9bb6c9; stroke-width: 2; rx: 10; filter: url(#shadow); }
+      .accent { fill: #bb5a3f; }
+      .blue { fill: #2f6f8f; }
+      .green { fill: #537a4c; }
+      .line { stroke: #28475a; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .muted-line { stroke: #8199a4; stroke-width: 2.2; fill: none; marker-end: url(#arrow); stroke-dasharray: 8 7; }
+      .pill { fill: #edf4f1; stroke: #9fb2aa; stroke-width: 1.5; rx: 14; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <rect x="34" y="34" width="1212" height="652" rx="24" fill="none" stroke="#b6c3bd" stroke-width="2"/>
+
+  <text x="70" y="88" class="title">LegacyLens</text>
+  <text x="70" y="119" class="subtitle">Citation-grounded COBOL RAG with dependency maps and explicit fallback UX</text>
+
+  <rect x="70" y="166" width="230" height="145" class="box"/>
+  <circle cx="105" cy="202" r="12" class="accent"/>
+  <text x="128" y="207" class="label">COBOL Corpus</text>
+  <text x="95" y="242" class="small">.cob .cbl .cpy .at</text>
+  <text x="95" y="268" class="small">sample_codebase</text>
+  <text x="95" y="294" class="tiny">50+ files, 10k+ LOC gate</text>
+
+  <rect x="374" y="166" width="250" height="145" class="box2"/>
+  <circle cx="409" cy="202" r="12" class="green"/>
+  <text x="432" y="207" class="label">Ingest</text>
+  <text x="399" y="242" class="small">Syntax-aware chunks</text>
+  <text x="399" y="268" class="small">OpenAI embeddings</text>
+  <text x="399" y="294" class="tiny">metadata: file, lines, symbols</text>
+
+  <rect x="696" y="166" width="230" height="145" class="box"/>
+  <circle cx="731" cy="202" r="12" class="blue"/>
+  <text x="754" y="207" class="label">Qdrant</text>
+  <text x="721" y="242" class="small">Vector points</text>
+  <text x="721" y="268" class="small">Payload metadata</text>
+  <text x="721" y="294" class="tiny">collection diagnostics</text>
+
+  <rect x="1000" y="166" width="210" height="145" class="box2"/>
+  <circle cx="1035" cy="202" r="12" class="accent"/>
+  <text x="1058" y="207" class="label">Query API</text>
+  <text x="1025" y="242" class="small">POST /query</text>
+  <text x="1025" y="268" class="small">POST /query/stream</text>
+  <text x="1025" y="294" class="tiny">FastAPI + SSE</text>
+
+  <path d="M 300 238 C 332 238 340 238 374 238" class="line"/>
+  <path d="M 624 238 C 660 238 664 238 696 238" class="line"/>
+  <path d="M 926 238 C 962 238 968 238 1000 238" class="line"/>
+
+  <rect x="70" y="386" width="290" height="172" class="box2"/>
+  <circle cx="105" cy="423" r="12" class="blue"/>
+  <text x="128" y="428" class="label">Retrieval</text>
+  <text x="95" y="464" class="small">Semantic top-k primary</text>
+  <text x="95" y="490" class="small">Entity + lexical rerank</text>
+  <text x="95" y="516" class="small">Keyword fallback on outage</text>
+  <text x="95" y="542" class="tiny">diagnostics: score, latency, mix</text>
+
+  <rect x="430" y="386" width="285" height="172" class="box"/>
+  <circle cx="465" cy="423" r="12" class="green"/>
+  <text x="488" y="428" class="label">Grounded Answer</text>
+  <text x="455" y="464" class="small">Retrieved context only</text>
+  <text x="455" y="490" class="small">Evidence appendix if needed</text>
+  <text x="455" y="516" class="small">Citations-only on LLM failure</text>
+  <text x="455" y="542" class="tiny">answer_id for traceability</text>
+
+  <rect x="785" y="386" width="245" height="172" class="box2"/>
+  <circle cx="820" cy="423" r="12" class="accent"/>
+  <text x="843" y="428" class="label">Dependency Map</text>
+  <text x="810" y="464" class="small">PERFORM edges</text>
+  <text x="810" y="490" class="small">CALL edges</text>
+  <text x="810" y="516" class="small">/callers and /graph</text>
+  <text x="810" y="542" class="tiny">nodes, edges, relations</text>
+
+  <rect x="1080" y="386" width="130" height="172" class="box"/>
+  <text x="1103" y="428" class="label">Proof</text>
+  <text x="1102" y="464" class="small">pytest</text>
+  <text x="1102" y="490" class="small">eval JSONL</text>
+  <text x="1102" y="516" class="small">traceability</text>
+  <text x="1102" y="542" class="tiny">local demo</text>
+
+  <path d="M 1000 311 C 902 350 650 344 360 404" class="line"/>
+  <path d="M 360 472 C 392 472 398 472 430 472" class="line"/>
+  <path d="M 624 311 C 734 340 785 362 852 386" class="muted-line"/>
+  <path d="M 715 472 C 750 472 754 472 785 472" class="muted-line"/>
+  <path d="M 1030 472 C 1056 472 1058 472 1080 472" class="line"/>
+
+  <rect x="72" y="605" width="1138" height="42" class="pill"/>
+  <text x="96" y="631" class="small">Trust contract: no answer without sources, no hidden degradation, no fake deployment claim. Local proof is the README demo.</text>
+</svg>
